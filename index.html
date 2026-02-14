@@ -3,138 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tombola Live Cloud</title>
+    <title>Tombola Live 2026</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-
     <style>
-        body { font-family: 'Poppins', sans-serif; background-color: #0f172a; color: white; padding-bottom: 80px; }
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
-        .gradient-text { background: linear-gradient(to right, #c084fc, #e879f9); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .card-prize { transition: transform 0.2s; }
-        .card-prize:active { transform: scale(0.98); }
-        .tab-active { color: #d8b4fe; border-bottom: 2px solid #d8b4fe; }
-        .tab-inactive { color: #94a3b8; }
-        
-        /* Animation Gagnant */
-        @keyframes heartbeat { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-        .pulse-anim { animation: heartbeat 1s infinite; }
+        [x-cloak] { display: none !important; }
+        body { background-color: #0f172a; color: white; font-family: system-ui, sans-serif; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .input-dark { background: #1e293b; border: 1px solid #334155; color: white; padding: 0.5rem; border-radius: 0.5rem; width: 100%; }
+        .btn-primary { background: linear-gradient(135deg, #6366f1, #a855f7); color: white; font-weight: bold; padding: 0.75rem; border-radius: 0.5rem; width: 100%; transition: transform 0.1s; }
+        .btn-primary:active { transform: scale(0.98); }
+        .card-img { height: 120px; width: 100%; object-fit: cover; border-radius: 0.5rem; }
     </style>
 </head>
-<body>
 
-    <div id="connectionStatus" class="fixed top-0 left-0 w-full bg-red-600 text-white text-[10px] text-center py-1 z-50 font-bold">
-        CONNEXION FIREBASE EN COURS...
-    </div>
+<body x-data="tombolaApp()" x-init="initFirebase()" class="min-h-screen pb-20">
 
-    <div class="max-w-md mx-auto p-4 pt-8">
-        
-        <header class="flex justify-between items-center mb-6">
-            <div>
-                <h1 class="text-2xl font-black gradient-text">TOMBOLA 2026</h1>
-                <p class="text-xs text-slate-400">Soirée privée</p>
-            </div>
-            <button onclick="toggleAdmin()" class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white">
-                <i class="fas fa-lock"></i>
-            </button>
-        </header>
-
-        <div class="flex border-b border-slate-700 mb-6">
-            <button onclick="switchTab('prizes')" id="tab-prizes" class="flex-1 py-3 font-bold text-sm tab-active">🎁 LES LOTS</button>
-            <button onclick="switchTab('live')" id="tab-live" class="flex-1 py-3 font-bold text-sm tab-inactive">🎲 TIRAGE LIVE</button>
-        </div>
-
-        <div id="view-prizes" class="space-y-4">
-            <div id="prizesList" class="grid grid-cols-1 gap-3">
-                <div class="text-center text-slate-500 py-10">Chargement des lots...</div>
+    <header class="p-4 flex justify-between items-center glass sticky top-0 z-50">
+        <div>
+            <h1 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">TOMBOLA</h1>
+            <div class="text-xs text-green-400 flex items-center gap-1">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                <span x-text="isConnected ? 'LIVE' : 'Déconnecté'"></span>
             </div>
         </div>
+        <button @click="toggleAdmin()" class="text-slate-400 p-2"><i class="fas fa-cog"></i></button>
+    </header>
 
-        <div id="view-live" class="hidden space-y-4">
+    <main class="p-4 max-w-md mx-auto space-y-6">
+
+        <div x-show="gameState.status !== 'idle'" x-transition class="glass p-6 rounded-2xl text-center border-2 border-purple-500/50">
             
-            <div id="winnerDisplay" class="hidden glass rounded-2xl p-6 text-center border border-yellow-500/30 relative overflow-hidden">
-                <div class="absolute inset-0 bg-yellow-500/10 z-0"></div>
-                <div class="relative z-10">
-                    <p class="text-yellow-400 text-xs font-bold tracking-widest uppercase mb-2">Le gagnant du lot est...</p>
-                    <h2 id="winnerName" class="text-4xl font-black text-white drop-shadow-lg mb-2">...</h2>
-                    <p id="winnerPrize" class="text-purple-300 font-medium">---</p>
+            <template x-if="gameState.status === 'drawing'">
+                <div class="animate-pulse">
+                    <h2 class="text-xl font-bold text-purple-300 mb-2">Tirage au sort...</h2>
+                    <div class="text-4xl mb-2">🎲</div>
+                    <p class="text-sm">Pour gagner : <span x-text="gameState.currentPrize" class="font-bold"></span></p>
                 </div>
-            </div>
+            </template>
 
-            <div class="flex justify-between items-center glass px-4 py-3 rounded-xl">
-                <span class="text-sm text-slate-300">Participants</span>
-                <span id="totalBadge" class="bg-purple-600 text-xs font-bold px-2 py-1 rounded-full">0 tickets</span>
-            </div>
-
-            <div id="participantsList" class="space-y-2 pb-20">
+            <template x-if="gameState.status === 'winner'">
+                <div>
+                    <h2 class="text-sm uppercase text-yellow-500 font-bold tracking-widest mb-2">Vainqueur !</h2>
+                    <div class="text-4xl font-black text-white mb-2" x-text="gameState.winnerName"></div>
+                    <div class="bg-slate-800 p-2 rounded text-sm text-purple-200">
+                        Remporte : <span x-text="gameState.currentPrize" class="font-bold text-white"></span>
+                    </div>
                 </div>
+            </template>
         </div>
 
-    </div>
-
-    <div id="adminPanel" class="fixed inset-0 bg-slate-900 z-40 hidden overflow-y-auto">
-        <div class="p-5 max-w-md mx-auto">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold text-white"><i class="fas fa-user-shield text-purple-500 mr-2"></i>Admin</h2>
-                <button onclick="document.getElementById('adminPanel').classList.add('hidden')" class="text-slate-400"><i class="fas fa-times text-xl"></i></button>
-            </div>
-
-            <div class="bg-slate-800/50 p-4 rounded-xl mb-6 border border-slate-700">
-                <h3 class="text-sm font-bold text-purple-300 uppercase mb-3">🛠 Configuration</h3>
-                
-                <div class="space-y-2 mb-4 pb-4 border-b border-slate-700">
-                    <label class="text-xs text-slate-400">Créer un Pack (ex: 52₪ = 6 tickets)</label>
-                    <div class="flex gap-2">
-                        <input id="confPackName" type="text" placeholder="Nom (ex: Pack Tikoun)" class="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white">
-                        <input id="confPackCount" type="number" placeholder="Nb Tickets" class="w-20 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white">
+        <div>
+            <h3 class="font-bold text-lg mb-3 flex items-center gap-2"><i class="fas fa-gift text-purple-400"></i> Les Lots à Gagner</h3>
+            <div class="grid grid-cols-2 gap-3">
+                <template x-for="(prize, key) in prizes" :key="key">
+                    <div class="glass p-2 rounded-xl flex flex-col items-center text-center">
+                        <img :src="prize.image || 'https://via.placeholder.com/150?text=Cadeau'" class="card-img mb-2 bg-slate-800">
+                        <span class="font-bold text-sm leading-tight" x-text="prize.name"></span>
                     </div>
-                    <button onclick="createPack()" class="w-full bg-slate-700 hover:bg-slate-600 text-xs py-2 rounded text-slate-300">Enregistrer ce Pack</button>
+                </template>
+                <div x-show="Object.keys(prizes).length === 0" class="col-span-2 text-center text-slate-500 text-sm py-4">
+                    Aucun lot configuré pour l'instant.
                 </div>
+            </div>
+        </div>
 
-                <div class="space-y-2">
-                    <label class="text-xs text-slate-400">Ajouter un Lot à la vitrine</label>
-                    <div class="flex gap-2">
-                        <input id="confPrizeName" type="text" placeholder="Nom du lot (ex: Enceinte JBL)" class="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white">
-                        <button onclick="addPrizeToDisplay()" class="bg-green-600/20 text-green-400 px-4 rounded hover:bg-green-600/30"><i class="fas fa-plus"></i></button>
+        <div class="pt-4 border-t border-slate-700">
+            <h3 class="font-bold text-lg mb-3">Participants (<span x-text="totalTickets"></span> tickets)</h3>
+            <div class="space-y-2 max-h-60 overflow-y-auto pr-2">
+                <template x-for="p in sortedParticipants" :key="p.id">
+                    <div class="flex justify-between items-center bg-slate-800/50 p-3 rounded-lg">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-xs" x-text="p.name.charAt(0)"></div>
+                            <span x-text="p.name"></span>
+                        </div>
+                        <span class="font-bold text-purple-400 text-sm"><span x-text="p.tickets"></span> 🎟</span>
                     </div>
-                </div>
+                </template>
             </div>
+        </div>
+    </main>
 
-            <div class="bg-slate-800/50 p-4 rounded-xl mb-6 border border-slate-700">
-                <h3 class="text-sm font-bold text-green-400 uppercase mb-3">💰 Nouvelle Vente</h3>
-                <input id="inputName" type="text" placeholder="Nom du participant" class="w-full bg-slate-900 border border-slate-700 rounded p-3 mb-3 text-white focus:border-green-500 outline-none">
+    <div x-show="isAdmin" x-transition.opacity class="fixed inset-0 bg-slate-900 z-[100] overflow-y-auto p-4">
+        
+        <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
+            <h2 class="text-xl font-bold text-purple-400"><i class="fas fa-user-shield"></i> Administration</h2>
+            <button @click="isAdmin = false" class="text-white bg-slate-700 px-3 py-1 rounded">Fermer</button>
+        </div>
+
+        <div class="grid gap-8 max-w-2xl mx-auto">
+
+            <section class="bg-gradient-to-br from-indigo-900 to-purple-900 p-6 rounded-xl border border-purple-500 shadow-xl">
+                <h3 class="font-bold text-white mb-4 text-lg border-b border-white/20 pb-2">🎲 LANCER LE TIRAGE</h3>
                 
-                <div id="packButtons" class="grid grid-cols-2 gap-2">
-                    <div class="text-xs text-slate-500 col-span-2 text-center">Crée des packs ci-dessus pour les voir ici.</div>
+                <div class="mb-4">
+                    <label class="text-xs text-purple-200 uppercase font-bold">1. Choisir le lot mis en jeu</label>
+                    <select x-model="selectedPrizeForDraw" class="input-dark mt-1 bg-slate-900 border-purple-400 h-12 text-lg">
+                        <option value="">-- Sélectionner un lot --</option>
+                        <template x-for="(prize, key) in prizes" :key="key">
+                            <option :value="prize.name" x-text="prize.name"></option>
+                        </template>
+                    </select>
                 </div>
+
+                <button @click="triggerDraw()" 
+                        :disabled="!selectedPrizeForDraw || gameState.status === 'drawing'"
+                        class="w-full bg-white text-purple-900 font-black text-xl py-4 rounded-xl shadow-lg hover:scale-[1.02] transition disabled:opacity-50 disabled:scale-100">
+                    <span x-show="gameState.status === 'idle' || gameState.status === 'winner'">TIRER AU SORT !</span>
+                    <span x-show="gameState.status === 'drawing'">Tirage en cours...</span>
+                </button>
+
+                <button @click="resetDraw()" class="mt-4 text-xs text-purple-300 underline w-full text-center">Reset (Cacher le gagnant)</button>
+            </section>
+
+            <section class="glass p-5 rounded-xl">
+                <h3 class="font-bold text-green-400 mb-4 uppercase text-sm">💰 Nouvelle Vente</h3>
+                
+                <input type="text" x-model="newParticipantName" placeholder="Nom du participant" class="input-dark mb-4 h-12 text-lg">
+                
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <template x-for="(pack, key) in ticketPacks" :key="key">
+                        <button @click="addParticipant(pack.count)" class="bg-slate-700 hover:bg-slate-600 p-3 rounded text-left transition relative group">
+                            <div class="font-bold text-white" x-text="pack.label"></div>
+                            <div class="text-xs text-slate-400"><span x-text="pack.count"></span> tickets</div>
+                            <i @click.stop="deletePack(key)" class="fas fa-times absolute top-1 right-1 text-red-500 opacity-0 group-hover:opacity-100 p-1"></i>
+                        </button>
+                    </template>
+                </div>
+                <p x-show="Object.keys(ticketPacks).length === 0" class="text-xs text-red-400 mb-2">Configure des packs de tickets ci-dessous d'abord !</p>
+            </section>
+
+            <div class="grid md:grid-cols-2 gap-4">
+                
+                <section class="glass p-4 rounded-xl">
+                    <h3 class="font-bold text-slate-300 mb-3 text-sm">🎁 Ajouter un Lot</h3>
+                    <div class="space-y-2">
+                        <input x-model="newPrizeName" type="text" placeholder="Nom (ex: iPad)" class="input-dark">
+                        <input x-model="newPrizeImage" type="text" placeholder="URL Image (http://...)" class="input-dark text-xs">
+                        <button @click="addPrize()" class="bg-slate-600 hover:bg-slate-500 text-white text-xs py-2 rounded w-full">Ajouter Lot</button>
+                    </div>
+                    <div class="mt-3 space-y-1">
+                        <template x-for="(prize, key) in prizes" :key="key">
+                            <div class="flex justify-between items-center text-xs bg-slate-800 p-2 rounded">
+                                <span x-text="prize.name"></span>
+                                <button @click="deletePrize(key)" class="text-red-400"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </template>
+                    </div>
+                </section>
+
+                <section class="glass p-4 rounded-xl">
+                    <h3 class="font-bold text-slate-300 mb-3 text-sm">🎟 Créer Type de Ticket</h3>
+                    <div class="space-y-2">
+                        <input x-model="newPackLabel" type="text" placeholder="Nom (ex: 26₪)" class="input-dark">
+                        <input x-model="newPackCount" type="number" placeholder="Nb Tickets (ex: 3)" class="input-dark">
+                        <button @click="addPack()" class="bg-slate-600 hover:bg-slate-500 text-white text-xs py-2 rounded w-full">Créer Pack</button>
+                    </div>
+                </section>
             </div>
 
-            <div class="bg-gradient-to-br from-purple-900/50 to-slate-900 p-4 rounded-xl border border-purple-500/50">
-                <h3 class="text-sm font-bold text-white uppercase mb-3">🎲 Lancer le Tirage</h3>
-                <select id="selectPrizeDraw" class="w-full bg-slate-900 border border-slate-700 rounded p-2 mb-3 text-sm text-white">
-                    <option value="">-- Choisir le lot à gagner --</option>
-                </select>
-                <button onclick="launchDraw()" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 py-3 rounded-lg font-bold shadow-lg shadow-purple-500/20">TIRER AU SORT</button>
-                <button onclick="resetGame()" class="w-full mt-2 text-xs text-red-400 py-2">Tout effacer (Reset)</button>
+            <div class="text-center pt-8">
+                <button @click="hardReset()" class="text-red-500 text-xs border border-red-900 p-2 rounded hover:bg-red-900/20">
+                    <i class="fas fa-skull"></i> TOUT EFFACER (Danger)
+                </button>
             </div>
 
-            <div class="mt-8 bg-white p-4 rounded-xl flex flex-col items-center">
-                <div id="qrcode"></div>
-                <p class="text-black text-xs font-bold mt-2">Scan pour inviter</p>
-            </div>
         </div>
     </div>
 
     <script>
-        // --- CONFIGURATION FIREBASE ---
         const firebaseConfig = {
             apiKey: "AIzaSyAZDCN7LTHrGacH-Y8mBStZ1eml5xeImo4",
             authDomain: "tombola-731c0.firebaseapp.com",
@@ -142,259 +186,142 @@
             projectId: "tombola-731c0",
         };
 
-        // Init Check
-        try {
-            firebase.initializeApp(firebaseConfig);
-            const db = firebase.database();
-            
-            // Test connexion visuel
-            db.ref('.info/connected').on('value', snap => {
-                const el = document.getElementById('connectionStatus');
-                if (snap.val() === true) {
-                    el.innerText = "CLOUD CONNECTÉ ✅";
-                    el.className = "fixed top-0 left-0 w-full bg-green-500 text-white text-[10px] text-center py-1 z-50 font-bold";
-                    setTimeout(() => { el.style.display = 'none'; }, 2000);
-                } else {
-                    el.style.display = 'block';
-                    el.innerText = "CONNEXION INTERROMPUE ❌";
-                    el.className = "fixed top-0 left-0 w-full bg-red-600 text-white text-[10px] text-center py-1 z-50 font-bold";
-                }
-            });
-
-            // --- REFS DB ---
-            const rParticipants = db.ref('participants');
-            const rPacks = db.ref('config/packs');
-            const rPrizes = db.ref('config/prizes'); // Lots vitrine
-            const rState = db.ref('state'); // status, currentWinner, currentPrize
-
-            // --- LISTENERS (Mise à jour UI) ---
-
-            // 1. Liste des Packs (Pour l'Admin)
-            rPacks.on('value', snap => {
-                const container = document.getElementById('packButtons');
-                container.innerHTML = '';
-                const data = snap.val();
-                if(data) {
-                    Object.entries(data).forEach(([key, pack]) => {
-                        const btn = document.createElement('button');
-                        btn.className = "bg-slate-700 hover:bg-slate-600 p-2 rounded text-left transition relative group";
-                        btn.innerHTML = `
-                            <div class="text-xs font-bold text-white">${pack.name}</div>
-                            <div class="text-[10px] text-purple-300">${pack.count} tickets</div>
-                            <i onclick="deletePack('${key}', event)" class="fas fa-trash absolute top-1 right-1 text-red-400 opacity-0 group-hover:opacity-100 text-xs p-1"></i>
-                        `;
-                        btn.onclick = (e) => { if(e.target.tagName !== 'I') addParticipant(pack.count); };
-                        container.appendChild(btn);
-                    });
-                } else {
-                    container.innerHTML = '<div class="text-xs text-slate-500 col-span-2 italic">Aucun pack configuré. Créez-en un au dessus !</div>';
-                }
-            });
-
-            // 2. Liste des Lots (Vitrine Publique + Select Admin)
-            rPrizes.on('value', snap => {
-                const list = document.getElementById('prizesList');
-                const select = document.getElementById('selectPrizeDraw');
+        function tombolaApp() {
+            return {
+                db: null,
+                isConnected: false,
+                isAdmin: false,
                 
-                list.innerHTML = '';
-                select.innerHTML = '<option value="">-- Choisir le lot à gagner --</option>';
+                // Data
+                participants: {},
+                prizes: {},
+                ticketPacks: {},
+                gameState: { status: 'idle', winnerName: '', currentPrize: '' },
                 
-                const data = snap.val();
-                if(data) {
-                    Object.entries(data).forEach(([key, name]) => {
-                        // Publique
-                        list.innerHTML += `
-                            <div class="glass p-4 rounded-xl flex items-center justify-between card-prize">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 rounded-full bg-purple-900/50 flex items-center justify-center text-purple-300"><i class="fas fa-gift"></i></div>
-                                    <span class="font-bold text-sm">${name}</span>
-                                </div>
-                                <button onclick="deletePrize('${key}')" class="admin-only hidden text-red-500 text-xs"><i class="fas fa-times"></i></button>
-                            </div>`;
-                        // Select Admin
-                        select.innerHTML += `<option value="${name}">${name}</option>`;
-                    });
-                } else {
-                    list.innerHTML = '<div class="text-center text-slate-500 py-4">Les lots arrivent bientôt !</div>';
-                }
-                checkAdminDisplay(); // Réappliquer visibilité admin
-            });
+                // Inputs Admin
+                newParticipantName: '',
+                selectedPrizeForDraw: '',
+                newPrizeName: '',
+                newPrizeImage: '',
+                newPackLabel: '',
+                newPackCount: '',
 
-            // 3. Participants & Stats
-            rParticipants.on('value', snap => {
-                const list = document.getElementById('participantsList');
-                list.innerHTML = '';
-                let total = 0;
-                const data = snap.val();
-                
-                if(data) {
-                    // Convertir en array pour trier (plus récents en haut)
-                    const arr = Object.values(data).reverse();
+                initFirebase() {
+                    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+                    this.db = firebase.database();
                     
-                    arr.forEach(p => {
-                        total += p.tickets;
-                        list.innerHTML += `
-                            <div class="flex justify-between items-center bg-slate-800/30 p-3 rounded-lg border border-slate-700/50">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
-                                        ${p.name.charAt(0).toUpperCase()}
-                                    </div>
-                                    <span class="text-sm font-medium">${p.name}</span>
-                                </div>
-                                <span class="text-xs font-bold text-purple-400 bg-purple-400/10 px-2 py-1 rounded">${p.tickets} 🎟</span>
-                            </div>`;
+                    // Connection Status
+                    this.db.ref('.info/connected').on('value', snap => this.isConnected = snap.val());
+
+                    // Listeners Realtime
+                    this.db.ref('participants').on('value', snap => this.participants = snap.val() || {});
+                    this.db.ref('config/prizes').on('value', snap => this.prizes = snap.val() || {});
+                    this.db.ref('config/packs').on('value', snap => this.ticketPacks = snap.val() || {});
+                    
+                    this.db.ref('state').on('value', snap => {
+                        this.gameState = snap.val() || { status: 'idle' };
+                        if (this.gameState.status === 'winner') this.fireConfetti();
                     });
-                }
-                document.getElementById('totalBadge').innerText = total + " tickets";
-            });
+                },
 
-            // 4. État du Jeu (Animation Tirage)
-            rState.on('value', snap => {
-                const state = snap.val() || {};
-                const display = document.getElementById('winnerDisplay');
-                const nameEl = document.getElementById('winnerName');
-                const prizeEl = document.getElementById('winnerPrize');
+                // Computed (Simulated in Alpine via getters)
+                get sortedParticipants() {
+                    return Object.entries(this.participants)
+                        .map(([key, val]) => ({ id: key, ...val }))
+                        .reverse(); // Newest first
+                },
+                get totalTickets() {
+                    return Object.values(this.participants).reduce((acc, p) => acc + (parseInt(p.tickets) || 0), 0);
+                },
 
-                if (state.status === 'drawing') {
-                    switchTab('live'); // Force switch tab
-                    display.classList.remove('hidden');
-                    display.classList.add('pulse-anim');
-                    nameEl.innerText = "🎲 ...";
-                    prizeEl.innerText = "Tirage pour : " + (state.currentPrize || "Surprise");
-                } else if (state.status === 'winner') {
-                    switchTab('live');
-                    display.classList.remove('hidden');
-                    display.classList.remove('pulse-anim');
-                    nameEl.innerText = state.winnerName;
-                    prizeEl.innerText = "Remporte : " + state.currentPrize;
-                    launchConfetti();
-                } else {
-                    display.classList.add('hidden');
-                }
-            });
+                // --- ACTIONS ---
 
-            // --- FONCTIONS ---
+                toggleAdmin() {
+                    const pwd = prompt("Mot de passe admin ?");
+                    if(pwd === "admin123") this.isAdmin = true;
+                },
 
-            window.switchTab = (tab) => {
-                document.getElementById('view-prizes').classList.add('hidden');
-                document.getElementById('view-live').classList.add('hidden');
-                document.getElementById('tab-prizes').className = "flex-1 py-3 font-bold text-sm tab-inactive";
-                document.getElementById('tab-live').className = "flex-1 py-3 font-bold text-sm tab-inactive";
-                
-                document.getElementById('view-' + tab).classList.remove('hidden');
-                document.getElementById('tab-' + tab).className = "flex-1 py-3 font-bold text-sm tab-active";
-            };
+                // 1. Config Packs
+                addPack() {
+                    if(!this.newPackLabel || !this.newPackCount) return;
+                    this.db.ref('config/packs').push({
+                        label: this.newPackLabel,
+                        count: parseInt(this.newPackCount)
+                    });
+                    this.newPackLabel = ''; this.newPackCount = '';
+                },
+                deletePack(key) { if(confirm('Supprimer ?')) this.db.ref('config/packs/' + key).remove(); },
 
-            window.toggleAdmin = () => {
-                const pass = prompt("Mot de passe Admin ?");
-                if(pass === "admin123") {
-                    document.getElementById('adminPanel').classList.remove('hidden');
-                    document.body.classList.add('admin-mode');
-                    checkAdminDisplay();
-                    // QR Code
-                    document.getElementById("qrcode").innerHTML = "";
-                    new QRCode(document.getElementById("qrcode"), { text: window.location.href.split('?')[0], width: 120, height: 120 });
-                }
-            };
+                // 2. Config Prizes
+                addPrize() {
+                    if(!this.newPrizeName) return;
+                    this.db.ref('config/prizes').push({
+                        name: this.newPrizeName,
+                        image: this.newPrizeImage
+                    });
+                    this.newPrizeName = ''; this.newPrizeImage = '';
+                },
+                deletePrize(key) { if(confirm('Supprimer ?')) this.db.ref('config/prizes/' + key).remove(); },
 
-            window.checkAdminDisplay = () => {
-                if(document.body.classList.contains('admin-mode')) {
-                    document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
-                }
-            };
+                // 3. Register Sales
+                addParticipant(count) {
+                    if(!this.newParticipantName) return alert("Nom manquant !");
+                    this.db.ref('participants').push({
+                        name: this.newParticipantName,
+                        tickets: parseInt(count),
+                        timestamp: Date.now()
+                    });
+                    // Feedback visual handled by Alpine reactivity
+                },
 
-            // Actions Admin
-            window.createPack = () => {
-                const name = document.getElementById('confPackName').value;
-                const count = parseInt(document.getElementById('confPackCount').value);
-                if(name && count) {
-                    rPacks.push({ name, count });
-                    alert("Pack ajouté !");
-                }
-            };
-
-            window.deletePack = (key, e) => {
-                e.stopPropagation();
-                if(confirm("Supprimer ce pack ?")) rPacks.child(key).remove();
-            };
-
-            window.addPrizeToDisplay = () => {
-                const name = document.getElementById('confPrizeName').value;
-                if(name) {
-                    rPrizes.push(name);
-                    document.getElementById('confPrizeName').value = '';
-                }
-            };
-            
-            window.deletePrize = (key) => {
-                if(confirm("Supprimer ce lot ?")) rPrizes.child(key).remove();
-            };
-
-            window.addParticipant = (tickets) => {
-                const name = document.getElementById('inputName').value;
-                if(!name) return alert("Veuillez entrer un nom d'abord");
-                
-                rParticipants.push({
-                    name: name,
-                    tickets: tickets,
-                    timestamp: Date.now()
-                });
-                // Feedback visuel
-                const btn = event.currentTarget;
-                btn.style.borderColor = "#4ade80";
-                setTimeout(() => btn.style.borderColor = "", 500);
-            };
-
-            window.launchDraw = () => {
-                const prizeName = document.getElementById('selectPrizeDraw').value;
-                if(!prizeName) return alert("Choisis un lot à gagner dans la liste !");
-
-                rParticipants.once('value', snap => {
-                    const data = snap.val();
-                    if(!data) return alert("Aucun participant inscrit !");
-
-                    // Algorithme de tirage pondéré
-                    let pool = [];
-                    Object.values(data).forEach(p => {
+                // 4. THE DRAW
+                triggerDraw() {
+                    const pool = [];
+                    Object.values(this.participants).forEach(p => {
                         for(let i=0; i<p.tickets; i++) pool.push(p);
                     });
 
-                    // 1. Animation Start
-                    rState.set({ status: 'drawing', currentPrize: prizeName });
+                    if(pool.length === 0) return alert("Pas de participants !");
 
-                    // 2. Resultat après délai
+                    // Step 1: Anim
+                    this.db.ref('state').set({
+                        status: 'drawing',
+                        currentPrize: this.selectedPrizeForDraw,
+                        winnerName: '...'
+                    });
+
+                    // Step 2: Result
                     setTimeout(() => {
                         const winner = pool[Math.floor(Math.random() * pool.length)];
-                        rState.set({ 
-                            status: 'winner', 
-                            winnerName: winner.name, 
-                            currentPrize: prizeName 
+                        this.db.ref('state').set({
+                            status: 'winner',
+                            currentPrize: this.selectedPrizeForDraw,
+                            winnerName: winner.name
                         });
-                    }, 3500);
-                });
-            };
+                    }, 4000); // 4s suspense
+                },
 
-            window.resetGame = () => {
-                if(confirm("ATTENTION : Cela efface tous les participants et l'état du jeu (mais garde les configs de packs/lots). Continuer ?")) {
-                    rParticipants.remove();
-                    rState.set(null);
+                resetDraw() {
+                    this.db.ref('state').set({ status: 'idle' });
+                },
+
+                hardReset() {
+                    if(confirm("T'es sûr de vouloir TOUT supprimer (participants, lots, tout) ?")) {
+                        this.db.ref('/').set(null);
+                        location.reload();
+                    }
+                },
+
+                fireConfetti() {
+                    const duration = 3000;
+                    const end = Date.now() + duration;
+                    (function frame() {
+                        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
+                        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
+                        if (Date.now() < end) requestAnimationFrame(frame);
+                    }());
                 }
-            };
-
-            window.launchConfetti = () => {
-                var duration = 3 * 1000;
-                var animationEnd = Date.now() + duration;
-                var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
-                var interval = setInterval(function() {
-                    var timeLeft = animationEnd - Date.now();
-                    if (timeLeft <= 0) return clearInterval(interval);
-                    var particleCount = 50 * (timeLeft / duration);
-                    confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random(), y: Math.random() - 0.2 } }));
-                }, 250);
-            };
-
-        } catch (e) {
-            alert("Erreur critique : " + e.message);
+            }
         }
     </script>
 </body>
