@@ -1,185 +1,4 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tombola Live 2026</title>
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
-    <style>
-        [x-cloak] { display: none !important; }
-        body { background-color: #0f172a; color: white; font-family: system-ui, sans-serif; }
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-        .input-dark { background: #1e293b; border: 1px solid #334155; color: white; padding: 0.5rem; border-radius: 0.5rem; width: 100%; }
-        .btn-primary { background: linear-gradient(135deg, #6366f1, #a855f7); color: white; font-weight: bold; padding: 0.75rem; border-radius: 0.5rem; width: 100%; transition: transform 0.1s; }
-        .btn-primary:active { transform: scale(0.98); }
-        .card-img { height: 120px; width: 100%; object-fit: cover; border-radius: 0.5rem; }
-    </style>
-</head>
-
-<body x-data="tombolaApp()" x-init="initFirebase()" class="min-h-screen pb-20">
-
-    <header class="p-4 flex justify-between items-center glass sticky top-0 z-50">
-        <div>
-            <h1 class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">TOMBOLA</h1>
-            <div class="text-xs text-green-400 flex items-center gap-1">
-                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <span x-text="isConnected ? 'LIVE' : 'Déconnecté'"></span>
-            </div>
-        </div>
-        <button @click="toggleAdmin()" class="text-slate-400 p-2"><i class="fas fa-cog"></i></button>
-    </header>
-
-    <main class="p-4 max-w-md mx-auto space-y-6">
-
-        <div x-show="gameState.status !== 'idle'" x-transition class="glass p-6 rounded-2xl text-center border-2 border-purple-500/50">
-            
-            <template x-if="gameState.status === 'drawing'">
-                <div class="animate-pulse">
-                    <h2 class="text-xl font-bold text-purple-300 mb-2">Tirage au sort...</h2>
-                    <div class="text-4xl mb-2">🎲</div>
-                    <p class="text-sm">Pour gagner : <span x-text="gameState.currentPrize" class="font-bold"></span></p>
-                </div>
-            </template>
-
-            <template x-if="gameState.status === 'winner'">
-                <div>
-                    <h2 class="text-sm uppercase text-yellow-500 font-bold tracking-widest mb-2">Vainqueur !</h2>
-                    <div class="text-4xl font-black text-white mb-2" x-text="gameState.winnerName"></div>
-                    <div class="bg-slate-800 p-2 rounded text-sm text-purple-200">
-                        Remporte : <span x-text="gameState.currentPrize" class="font-bold text-white"></span>
-                    </div>
-                </div>
-            </template>
-        </div>
-
-        <div>
-            <h3 class="font-bold text-lg mb-3 flex items-center gap-2"><i class="fas fa-gift text-purple-400"></i> Les Lots à Gagner</h3>
-            <div class="grid grid-cols-2 gap-3">
-                <template x-for="(prize, key) in prizes" :key="key">
-                    <div class="glass p-2 rounded-xl flex flex-col items-center text-center">
-                        <img :src="prize.image || 'https://via.placeholder.com/150?text=Cadeau'" class="card-img mb-2 bg-slate-800">
-                        <span class="font-bold text-sm leading-tight" x-text="prize.name"></span>
-                    </div>
-                </template>
-                <div x-show="Object.keys(prizes).length === 0" class="col-span-2 text-center text-slate-500 text-sm py-4">
-                    Aucun lot configuré pour l'instant.
-                </div>
-            </div>
-        </div>
-
-        <div class="pt-4 border-t border-slate-700">
-            <h3 class="font-bold text-lg mb-3">Participants (<span x-text="totalTickets"></span> tickets)</h3>
-            <div class="space-y-2 max-h-60 overflow-y-auto pr-2">
-                <template x-for="p in sortedParticipants" :key="p.id">
-                    <div class="flex justify-between items-center bg-slate-800/50 p-3 rounded-lg">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-xs" x-text="p.name.charAt(0)"></div>
-                            <span x-text="p.name"></span>
-                        </div>
-                        <span class="font-bold text-purple-400 text-sm"><span x-text="p.tickets"></span> 🎟</span>
-                    </div>
-                </template>
-            </div>
-        </div>
-    </main>
-
-    <div x-show="isAdmin" x-transition.opacity class="fixed inset-0 bg-slate-900 z-[100] overflow-y-auto p-4">
-        
-        <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-700">
-            <h2 class="text-xl font-bold text-purple-400"><i class="fas fa-user-shield"></i> Administration</h2>
-            <button @click="isAdmin = false" class="text-white bg-slate-700 px-3 py-1 rounded">Fermer</button>
-        </div>
-
-        <div class="grid gap-8 max-w-2xl mx-auto">
-
-            <section class="bg-gradient-to-br from-indigo-900 to-purple-900 p-6 rounded-xl border border-purple-500 shadow-xl">
-                <h3 class="font-bold text-white mb-4 text-lg border-b border-white/20 pb-2">🎲 LANCER LE TIRAGE</h3>
-                
-                <div class="mb-4">
-                    <label class="text-xs text-purple-200 uppercase font-bold">1. Choisir le lot mis en jeu</label>
-                    <select x-model="selectedPrizeForDraw" class="input-dark mt-1 bg-slate-900 border-purple-400 h-12 text-lg">
-                        <option value="">-- Sélectionner un lot --</option>
-                        <template x-for="(prize, key) in prizes" :key="key">
-                            <option :value="prize.name" x-text="prize.name"></option>
-                        </template>
-                    </select>
-                </div>
-
-                <button @click="triggerDraw()" 
-                        :disabled="!selectedPrizeForDraw || gameState.status === 'drawing'"
-                        class="w-full bg-white text-purple-900 font-black text-xl py-4 rounded-xl shadow-lg hover:scale-[1.02] transition disabled:opacity-50 disabled:scale-100">
-                    <span x-show="gameState.status === 'idle' || gameState.status === 'winner'">TIRER AU SORT !</span>
-                    <span x-show="gameState.status === 'drawing'">Tirage en cours...</span>
-                </button>
-
-                <button @click="resetDraw()" class="mt-4 text-xs text-purple-300 underline w-full text-center">Reset (Cacher le gagnant)</button>
-            </section>
-
-            <section class="glass p-5 rounded-xl">
-                <h3 class="font-bold text-green-400 mb-4 uppercase text-sm">💰 Nouvelle Vente</h3>
-                
-                <input type="text" x-model="newParticipantName" placeholder="Nom du participant" class="input-dark mb-4 h-12 text-lg">
-                
-                <div class="grid grid-cols-2 gap-2 mb-2">
-                    <template x-for="(pack, key) in ticketPacks" :key="key">
-                        <button @click="addParticipant(pack.count)" class="bg-slate-700 hover:bg-slate-600 p-3 rounded text-left transition relative group">
-                            <div class="font-bold text-white" x-text="pack.label"></div>
-                            <div class="text-xs text-slate-400"><span x-text="pack.count"></span> tickets</div>
-                            <i @click.stop="deletePack(key)" class="fas fa-times absolute top-1 right-1 text-red-500 opacity-0 group-hover:opacity-100 p-1"></i>
-                        </button>
-                    </template>
-                </div>
-                <p x-show="Object.keys(ticketPacks).length === 0" class="text-xs text-red-400 mb-2">Configure des packs de tickets ci-dessous d'abord !</p>
-            </section>
-
-            <div class="grid md:grid-cols-2 gap-4">
-                
-                <section class="glass p-4 rounded-xl">
-                    <h3 class="font-bold text-slate-300 mb-3 text-sm">🎁 Ajouter un Lot</h3>
-                    <div class="space-y-2">
-                        <input x-model="newPrizeName" type="text" placeholder="Nom (ex: iPad)" class="input-dark">
-                        <input x-model="newPrizeImage" type="text" placeholder="URL Image (http://...)" class="input-dark text-xs">
-                        <button @click="addPrize()" class="bg-slate-600 hover:bg-slate-500 text-white text-xs py-2 rounded w-full">Ajouter Lot</button>
-                    </div>
-                    <div class="mt-3 space-y-1">
-                        <template x-for="(prize, key) in prizes" :key="key">
-                            <div class="flex justify-between items-center text-xs bg-slate-800 p-2 rounded">
-                                <span x-text="prize.name"></span>
-                                <button @click="deletePrize(key)" class="text-red-400"><i class="fas fa-trash"></i></button>
-                            </div>
-                        </template>
-                    </div>
-                </section>
-
-                <section class="glass p-4 rounded-xl">
-                    <h3 class="font-bold text-slate-300 mb-3 text-sm">🎟 Créer Type de Ticket</h3>
-                    <div class="space-y-2">
-                        <input x-model="newPackLabel" type="text" placeholder="Nom (ex: 26₪)" class="input-dark">
-                        <input x-model="newPackCount" type="number" placeholder="Nb Tickets (ex: 3)" class="input-dark">
-                        <button @click="addPack()" class="bg-slate-600 hover:bg-slate-500 text-white text-xs py-2 rounded w-full">Créer Pack</button>
-                    </div>
-                </section>
-            </div>
-
-            <div class="text-center pt-8">
-                <button @click="hardReset()" class="text-red-500 text-xs border border-red-900 p-2 rounded hover:bg-red-900/20">
-                    <i class="fas fa-skull"></i> TOUT EFFACER (Danger)
-                </button>
-            </div>
-
-        </div>
-    </div>
-
-    <script>
-        const firebaseConfig = {
+const firebaseConfig = {
             apiKey: "AIzaSyAZDCN7LTHrGacH-Y8mBStZ1eml5xeImo4",
             authDomain: "tombola-731c0.firebaseapp.com",
             databaseURL: "https://tombola-731c0-default-rtdb.firebaseio.com",
@@ -198,7 +17,7 @@
                 ticketPacks: {},
                 gameState: { status: 'idle', winnerName: '', currentPrize: '' },
                 
-                // Inputs Admin
+                // Inputs
                 newParticipantName: '',
                 selectedPrizeForDraw: '',
                 newPrizeName: '',
@@ -207,74 +26,90 @@
                 newPackCount: '',
 
                 initFirebase() {
-                    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-                    this.db = firebase.database();
-                    
-                    // Connection Status
-                    this.db.ref('.info/connected').on('value', snap => this.isConnected = snap.val());
+                    try {
+                        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+                        this.db = firebase.database();
+                        
+                        // Test connexion
+                        this.db.ref('.info/connected').on('value', snap => {
+                            this.isConnected = snap.val();
+                            if(!this.isConnected) console.log("Déconnecté de Firebase...");
+                        });
 
-                    // Listeners Realtime
-                    this.db.ref('participants').on('value', snap => this.participants = snap.val() || {});
-                    this.db.ref('config/prizes').on('value', snap => this.prizes = snap.val() || {});
-                    this.db.ref('config/packs').on('value', snap => this.ticketPacks = snap.val() || {});
-                    
-                    this.db.ref('state').on('value', snap => {
-                        this.gameState = snap.val() || { status: 'idle' };
-                        if (this.gameState.status === 'winner') this.fireConfetti();
-                    });
+                        // Listeners avec gestion d'erreur
+                        const refs = ['participants', 'config/prizes', 'config/packs', 'state'];
+                        
+                        this.db.ref('participants').on('value', snap => this.participants = snap.val() || {});
+                        this.db.ref('config/prizes').on('value', snap => this.prizes = snap.val() || {});
+                        this.db.ref('config/packs').on('value', snap => this.ticketPacks = snap.val() || {});
+                        
+                        this.db.ref('state').on('value', snap => {
+                            this.gameState = snap.val() || { status: 'idle' };
+                            if (this.gameState.status === 'winner') this.fireConfetti();
+                        });
+
+                    } catch (e) {
+                        alert("ERREUR INITIALISATION : " + e.message);
+                    }
                 },
 
-                // Computed (Simulated in Alpine via getters)
+                // Getters
                 get sortedParticipants() {
-                    return Object.entries(this.participants)
-                        .map(([key, val]) => ({ id: key, ...val }))
-                        .reverse(); // Newest first
+                    return Object.entries(this.participants).map(([key, val]) => ({ id: key, ...val })).reverse();
                 },
                 get totalTickets() {
                     return Object.values(this.participants).reduce((acc, p) => acc + (parseInt(p.tickets) || 0), 0);
                 },
 
-                // --- ACTIONS ---
-
+                // Actions
                 toggleAdmin() {
                     const pwd = prompt("Mot de passe admin ?");
                     if(pwd === "admin123") this.isAdmin = true;
                 },
 
-                // 1. Config Packs
+                // AJOUTS AVEC DEBUG (ALERTES)
                 addPack() {
-                    if(!this.newPackLabel || !this.newPackCount) return;
+                    if(!this.newPackLabel || !this.newPackCount) return alert("Remplis les champs !");
                     this.db.ref('config/packs').push({
                         label: this.newPackLabel,
                         count: parseInt(this.newPackCount)
-                    });
+                    }).catch(e => alert("ERREUR AJOUT PACK : " + e.message + "\n\nAS-TU FAIT L'ETAPE 1 (REGLES FIREBASE) ??"));
+                    
                     this.newPackLabel = ''; this.newPackCount = '';
                 },
-                deletePack(key) { if(confirm('Supprimer ?')) this.db.ref('config/packs/' + key).remove(); },
 
-                // 2. Config Prizes
+                deletePack(key) { 
+                    if(confirm('Supprimer ?')) this.db.ref('config/packs/' + key).remove()
+                    .catch(e => alert("Erreur suppression : " + e.message)); 
+                },
+
                 addPrize() {
-                    if(!this.newPrizeName) return;
+                    if(!this.newPrizeName) return alert("Mets un nom !");
                     this.db.ref('config/prizes').push({
                         name: this.newPrizeName,
                         image: this.newPrizeImage
-                    });
+                    }).catch(e => alert("ERREUR AJOUT LOT : " + e.message + "\n\nVERIFIE LES REGLES FIREBASE !"));
+                    
                     this.newPrizeName = ''; this.newPrizeImage = '';
                 },
-                deletePrize(key) { if(confirm('Supprimer ?')) this.db.ref('config/prizes/' + key).remove(); },
 
-                // 3. Register Sales
+                deletePrize(key) { 
+                    if(confirm('Supprimer ?')) this.db.ref('config/prizes/' + key).remove(); 
+                },
+
                 addParticipant(count) {
-                    if(!this.newParticipantName) return alert("Nom manquant !");
+                    if(!this.newParticipantName) return alert("Il faut un nom !");
                     this.db.ref('participants').push({
                         name: this.newParticipantName,
                         tickets: parseInt(count),
                         timestamp: Date.now()
+                    }).then(() => {
+                        // Succès silencieux (optionnel: alert("Vendu !"))
+                    }).catch(e => {
+                        alert("ERREUR VENTE : " + e.message + "\n\nLa base de données refuse l'écriture. Va voir l'étape 1 !");
                     });
-                    // Feedback visual handled by Alpine reactivity
                 },
 
-                // 4. THE DRAW
                 triggerDraw() {
                     const pool = [];
                     Object.values(this.participants).forEach(p => {
@@ -283,14 +118,12 @@
 
                     if(pool.length === 0) return alert("Pas de participants !");
 
-                    // Step 1: Anim
                     this.db.ref('state').set({
                         status: 'drawing',
                         currentPrize: this.selectedPrizeForDraw,
                         winnerName: '...'
-                    });
+                    }).catch(e => alert("Erreur lancement tirage : " + e.message));
 
-                    // Step 2: Result
                     setTimeout(() => {
                         const winner = pool[Math.floor(Math.random() * pool.length)];
                         this.db.ref('state').set({
@@ -298,15 +131,13 @@
                             currentPrize: this.selectedPrizeForDraw,
                             winnerName: winner.name
                         });
-                    }, 4000); // 4s suspense
+                    }, 4000);
                 },
 
-                resetDraw() {
-                    this.db.ref('state').set({ status: 'idle' });
-                },
+                resetDraw() { this.db.ref('state').set({ status: 'idle' }); },
 
                 hardReset() {
-                    if(confirm("T'es sûr de vouloir TOUT supprimer (participants, lots, tout) ?")) {
+                    if(confirm("Tout effacer ?")) {
                         this.db.ref('/').set(null);
                         location.reload();
                     }
@@ -323,6 +154,3 @@
                 }
             }
         }
-    </script>
-</body>
-</html>
