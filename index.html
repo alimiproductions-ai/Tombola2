@@ -1,45 +1,320 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Tombola Deluxe</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tombola Live Cloud</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Bangers&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background: radial-gradient(circle at top, #1e1b4b, #0f172a);
-            color: white;
-            min-height: 100vh;
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: white; }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .font-bangers {
-            font-family: 'Bangers', cursive;
+        .btn-primary {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            transition: all 0.2s;
         }
-        /* Pour cacher la barre de défilement tout en gardant le scroll */
-        ::-webkit-scrollbar {
-            width: 0px;
-            background: transparent;
+        .btn-primary:active { transform: scale(0.95); }
+        
+        /* Animation du tirage */
+        @keyframes heartbeat {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
         }
+        .animate-draw { animation: heartbeat 0.8s infinite ease-in-out; }
+        
+        /* Masquer les scrollbars pour une UX mobile native */
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js",
-    "firebase/": "https://esm.sh/firebase@^12.9.0/"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
 </head>
-<body>
-    <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
+
+    <div class="absolute top-0 left-0 w-full h-full overflow-hidden -z-10 opacity-20">
+        <div class="absolute top-10 left-10 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob"></div>
+        <div class="absolute top-10 right-10 w-72 h-72 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000"></div>
+    </div>
+
+    <div id="app" class="w-full max-w-md mx-auto relative z-10 flex flex-col gap-4">
+        
+        <div class="glass-panel rounded-2xl p-6 text-center shadow-2xl relative">
+            <button onclick="toggleAdmin()" class="absolute top-4 right-4 text-gray-500 hover:text-white transition"><i class="fas fa-cog"></i></button>
+            <h1 class="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">
+                TOMBOLA
+            </h1>
+            <p id="connectionStatus" class="text-xs text-green-400 mt-2 flex items-center justify-center gap-2">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Cloud Connecté
+            </p>
+        </div>
+
+        <div id="publicView" class="glass-panel rounded-2xl p-6 min-h-[300px]">
+            <h2 class="text-xl font-bold mb-4 flex justify-between items-center">
+                Participants <span id="totalTicketsBadge" class="bg-gray-700 text-xs px-2 py-1 rounded-full">0 tickets</span>
+            </h2>
+            <div id="participantsList" class="space-y-3 max-h-60 overflow-y-auto">
+                <div class="text-gray-400 text-center text-sm">En attente d'inscriptions...</div>
+            </div>
+            
+            <div id="winnerDisplay" class="hidden mt-6 text-center p-4 border-2 border-yellow-500/50 rounded-xl bg-yellow-500/10">
+                <p class="text-sm text-yellow-200 uppercase tracking-widest mb-1">Le gagnant est</p>
+                <h2 id="winnerName" class="text-3xl font-black text-white drop-shadow-lg">---</h2>
+                <p id="prizeName" class="text-lg text-purple-200 mt-2">---</p>
+            </div>
+        </div>
+
+        <div id="adminPanel" class="hidden glass-panel rounded-2xl p-6 space-y-6 border-t-4 border-purple-500">
+            <h3 class="text-lg font-bold text-purple-300"><i class="fas fa-user-shield mr-2"></i>Admin Panel</h3>
+            
+            <div>
+                <label class="text-xs text-gray-400 uppercase font-bold">Prix à gagner</label>
+                <input type="text" id="prizeInput" placeholder="Ex: Une enceinte Bluetooth" class="w-full bg-gray-800 rounded-lg p-3 mt-1 text-sm border border-gray-700 focus:border-purple-500 outline-none">
+            </div>
+
+            <div class="space-y-2">
+                <label class="text-xs text-gray-400 uppercase font-bold">Nouvelle Vente</label>
+                <input type="text" id="inputName" placeholder="Nom du participant" class="w-full bg-gray-800 rounded-lg p-3 text-sm border border-gray-700 outline-none">
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="addParticipant(3)" class="bg-gray-700 hover:bg-gray-600 p-2 rounded-lg text-xs font-medium transition">
+                        Pack Standard <br><span class="text-gray-400">26₪ (3 tickets)</span>
+                    </button>
+                    <button onclick="addParticipant(6)" class="bg-gray-700 hover:bg-gray-600 p-2 rounded-lg text-xs font-medium transition">
+                        Pack Double <br><span class="text-gray-400">52₪ (6 tickets)</span>
+                    </button>
+                    <button onclick="addParticipant(10)" class="bg-gray-700 hover:bg-gray-600 p-2 rounded-lg text-xs font-medium transition border border-purple-500/30">
+                        Pack Tikoun <br><span class="text-purple-300">5 Tikounim (10 tkt)</span>
+                    </button>
+                    <div class="flex items-center bg-gray-800 rounded-lg px-2">
+                        <input type="number" id="manualTickets" placeholder="#" class="w-full bg-transparent text-center text-sm p-1 outline-none">
+                        <button onclick="addParticipant(document.getElementById('manualTickets').value)" class="text-green-400 px-2"><i class="fas fa-plus"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-700 flex flex-col gap-3">
+                <button onclick="triggerDraw()" class="btn-primary w-full py-4 rounded-xl font-bold text-lg shadow-lg shadow-purple-500/30 flex items-center justify-center gap-2">
+                    <i class="fas fa-dice"></i> LANCER LE TIRAGE
+                </button>
+                <button onclick="resetRaffle()" class="text-xs text-red-400 hover:text-red-300 underline text-center">Réinitialiser la Tombola</button>
+            </div>
+
+            <div class="mt-4 flex flex-col items-center justify-center p-4 bg-white rounded-xl">
+                <div id="qrcode"></div>
+                <p class="text-gray-800 text-xs mt-2 font-bold">Scanner pour suivre en LIVE</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 1. CONFIGURATION FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyAZDCN7LTHrGacH-Y8mBStZ1eml5xeImo4",
+            authDomain: "tombola-731c0.firebaseapp.com",
+            databaseURL: "https://tombola-731c0-default-rtdb.firebaseio.com",
+            projectId: "tombola-731c0",
+            storageBucket: "tombola-731c0.appspot.com",
+            messagingSenderId: "YOUR_ID", // Pas critique pour la DB
+            appId: "YOUR_ID"
+        };
+
+        // Initialisation
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        
+        // Références DB
+        const participantsRef = db.ref('participants');
+        const statusRef = db.ref('status'); // 'waiting', 'drawing', 'revealed'
+        const winnerRef = db.ref('winner');
+        const prizeRef = db.ref('currentPrize');
+
+        // --- GESTION DE L'INTERFACE ADMIN ---
+        let isAdmin = false;
+        
+        // Vérifie l'URL au chargement
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('admin') === 'true') {
+            enableAdmin();
+        }
+
+        function toggleAdmin() {
+            const pass = prompt("Mot de passe admin ?");
+            if (pass === "admin123" || pass === "alimi") { // Simple protection client-side
+                enableAdmin();
+            }
+        }
+
+        function enableAdmin() {
+            isAdmin = true;
+            document.getElementById('adminPanel').classList.remove('hidden');
+            // Générer le QR Code pour l'URL actuelle (sans le param admin)
+            const cleanUrl = window.location.href.split('?')[0];
+            new QRCode(document.getElementById("qrcode"), {
+                text: cleanUrl,
+                width: 128,
+                height: 128
+            });
+        }
+
+        // --- LOGIQUE METIER & DONNEES ---
+
+        // 1. Écoute des participants (Mise à jour temps réel)
+        participantsRef.on('value', (snapshot) => {
+            const list = document.getElementById('participantsList');
+            const data = snapshot.val();
+            list.innerHTML = '';
+            
+            let totalT = 0;
+            if (data) {
+                Object.values(data).forEach(p => {
+                    totalT += parseInt(p.tickets);
+                    const div = document.createElement('div');
+                    div.className = "flex justify-between items-center bg-gray-800/50 p-3 rounded-lg border border-gray-700";
+                    div.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-xs font-bold">${p.name.charAt(0)}</div>
+                            <span class="font-medium">${p.name}</span>
+                        </div>
+                        <span class="text-sm font-bold text-purple-400">${p.tickets} <i class="fas fa-ticket-alt text-xs"></i></span>
+                    `;
+                    list.appendChild(div);
+                });
+            }
+            document.getElementById('totalTicketsBadge').innerText = `${totalT} tickets`;
+        });
+
+        // 2. Écoute du statut du jeu (Animation synchro)
+        statusRef.on('value', (snapshot) => {
+            const status = snapshot.val();
+            const winnerDiv = document.getElementById('winnerDisplay');
+            
+            if (status === 'drawing') {
+                // Animation de roulement de tambour
+                winnerDiv.classList.remove('hidden');
+                winnerDiv.querySelector('h2').innerText = "...";
+                winnerDiv.querySelector('h2').classList.add('animate-draw');
+                winnerDiv.classList.add('animate-pulse');
+            } else if (status === 'revealed') {
+                // Le gagnant est là
+                winnerDiv.querySelector('h2').classList.remove('animate-draw');
+                winnerDiv.classList.remove('animate-pulse');
+                launchConfetti();
+            } else {
+                // Reset
+                winnerDiv.classList.add('hidden');
+            }
+        });
+
+        // 3. Écoute des infos gagnant/prix
+        winnerRef.on('value', snap => {
+            if(snap.val()) document.getElementById('winnerName').innerText = snap.val().name;
+        });
+        prizeRef.on('value', snap => {
+            if(snap.val()) document.getElementById('prizeName').innerText = snap.val();
+        });
+
+
+        // --- FONCTIONS ADMIN ---
+
+        function addParticipant(ticketCount) {
+            const name = document.getElementById('inputName').value;
+            if (!name) return alert("Il faut un nom !");
+            
+            const tickets = parseInt(ticketCount);
+            if (!tickets) return;
+
+            // Push vers Firebase
+            participantsRef.push({
+                name: name,
+                tickets: tickets,
+                timestamp: Date.now()
+            });
+            
+            // UX Feedback
+            const btn = event.currentTarget;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = "<i class='fas fa-check'></i> Ajouté";
+            setTimeout(() => { btn.innerHTML = originalText; }, 1000);
+            
+            // Reset input (optionnel, selon préférence)
+            // document.getElementById('inputName').value = ''; 
+        }
+
+        async function triggerDraw() {
+            const prize = document.getElementById('prizeInput').value || "Prix Surprise";
+            prizeRef.set(prize);
+
+            // 1. Récupérer tous les tickets
+            participantsRef.once('value', snapshot => {
+                const data = snapshot.val();
+                if (!data) return alert("Personne n'est inscrit !");
+
+                // Créer le "Pool" de tickets (Pondération)
+                let pool = [];
+                Object.values(data).forEach(p => {
+                    for(let i=0; i < parseInt(p.tickets); i++) {
+                        pool.push(p);
+                    }
+                });
+
+                // 2. Set status to drawing (Tout le monde voit l'anim)
+                statusRef.set('drawing');
+
+                // 3. Attendre 3 secondes (suspense)
+                setTimeout(() => {
+                    // 4. Tirer le sort
+                    const winner = pool[Math.floor(Math.random() * pool.length)];
+                    
+                    winnerRef.set(winner);
+                    statusRef.set('revealed');
+                }, 3000);
+            });
+        }
+
+        function resetRaffle() {
+            if(confirm("Tout effacer pour une nouvelle tombola ?")) {
+                participantsRef.remove();
+                statusRef.set('waiting');
+                winnerRef.set(null);
+                prizeRef.set(null);
+            }
+        }
+
+        // --- EFFETS SPECIAUX ---
+        function launchConfetti() {
+            var duration = 3 * 1000;
+            var animationEnd = Date.now() + duration;
+            var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 999 };
+
+            function randomInOut(min, max) {
+                return Math.random() * (max - min) + min;
+            }
+
+            var interval = setInterval(function() {
+                var timeLeft = animationEnd - Date.now();
+
+                if (timeLeft <= 0) {
+                    return clearInterval(interval);
+                }
+
+                var particleCount = 50 * (timeLeft / duration);
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInOut(0.1, 0.3), y: Math.random() - 0.2 } }));
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInOut(0.7, 0.9), y: Math.random() - 0.2 } }));
+            }, 250);
+        }
+    </script>
 </body>
 </html>
