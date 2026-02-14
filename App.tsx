@@ -33,7 +33,7 @@ const INITIAL_PRIZES = [
   { id: 'prz1', name: 'Grand Prix', description: 'Un voyage incroyable' }
 ];
 
-const ADMIN_PASSWORD = "admin";
+const ADMIN_PASSWORD = "nanah148";
 
 // --- 3. FONCTIONS UTILITAIRES (Simule l'IA et gère la DB) ---
 const getWinnerCheer = (name: string) => {
