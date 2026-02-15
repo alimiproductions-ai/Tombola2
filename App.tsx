@@ -112,9 +112,10 @@ const App: React.FC = () => {
   const handleAddParticipant = async (participantData: Omit<Participant, 'id' | 'timestamp'>) => {
     const now = Date.now();
     
-    // Construction manuelle pour éviter les champs 'undefined' que Firebase refuse
+   // Construction manuelle pour éviter les champs 'undefined' que Firebase refuse
     const newParticipant: any = {
       name: participantData.name,
+      phone: participantData.phone || 'Non renseigné', // <-- AJOUTEZ CETTE LIGNE
       mode: participantData.mode,
       tickets: Number(participantData.tickets),
       totalAmount: Number(participantData.totalAmount),
