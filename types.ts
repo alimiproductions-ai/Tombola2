@@ -2,6 +2,7 @@
 export interface Participant {
   id: string;
   name: string;
+  phone: string;
   tickets: number;
   totalAmount: number;
   mode: 'pack' | 'unit';
