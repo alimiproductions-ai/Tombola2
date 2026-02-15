@@ -30,7 +30,6 @@ const App: React.FC = () => {
       console.warn("Firebase Auth Error:", error.message);
     });
 
-    // Sync Settings
     const settingsRef = ref(db, 'settings');
     onValue(settingsRef, (snapshot) => {
       const data = snapshot.val();
@@ -46,7 +45,6 @@ const App: React.FC = () => {
       }
     });
 
-    // Sync Participants
     const participantsRef = ref(db, 'participants');
     onValue(participantsRef, (snapshot) => {
       const data = snapshot.val();
@@ -58,7 +56,8 @@ const App: React.FC = () => {
           totalAmount: Number(val.totalAmount) || 0,
           mode: val.mode || 'unit',
           packLabel: val.packLabel,
-          timestamp: val.timestamp || Date.now(),
+          timestamp: val.timestamp || val.createdAt || Date.now(),
+          createdAt: val.createdAt || val.timestamp
         }));
         setParticipants(list);
       } else {
@@ -66,7 +65,6 @@ const App: React.FC = () => {
       }
     });
 
-    // Sync Packs
     const packsRef = ref(db, 'ticketPacks');
     onValue(packsRef, (snapshot) => {
       const data = snapshot.val();
@@ -81,7 +79,6 @@ const App: React.FC = () => {
       }
     });
 
-    // Sync Prizes
     const prizesRef = ref(db, 'prizes');
     onValue(prizesRef, (snapshot) => {
       const data = snapshot.val();
@@ -96,7 +93,6 @@ const App: React.FC = () => {
       }
     });
 
-    // Sync Draw History
     const historyRef = ref(db, 'drawHistory');
     onValue(historyRef, (snapshot) => {
       const data = snapshot.val();
@@ -113,18 +109,35 @@ const App: React.FC = () => {
   }, []);
 
   const handleAddParticipant = async (participantData: Omit<Participant, 'id' | 'timestamp'>) => {
-    const newParticipant: Omit<Participant, 'id'> = {
-      ...participantData,
-      timestamp: Date.now(),
+    const now = Date.now();
+    
+    // Construction manuelle pour éviter les champs 'undefined' que Firebase refuse
+    const newParticipant: any = {
+      name: participantData.name,
+      mode: participantData.mode,
+      tickets: Number(participantData.tickets),
+      totalAmount: Number(participantData.totalAmount),
+      timestamp: now,
+      createdAt: now
     };
 
-    await push(ref(db, 'participants'), newParticipant);
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#fbbf24', '#4c1d95', '#f472b6']
-    });
+    // N'ajouter packLabel que s'il est défini
+    if (participantData.packLabel) {
+      newParticipant.packLabel = participantData.packLabel;
+    }
+
+    try {
+      await push(ref(db, 'participants'), newParticipant);
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#fbbf24', '#4c1d95', '#f472b6']
+      });
+    } catch (error) {
+      console.error("Erreur lors de l'ajout du participant:", error);
+      alert("Une erreur est survenue lors de l'enregistrement. Veuillez réessayer.");
+    }
   };
 
   const handleDrawFinish = async (winnerName: string, prizeName: string) => {
