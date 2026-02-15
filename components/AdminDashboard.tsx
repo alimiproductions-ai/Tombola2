@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { ref, push, set, remove, update } from 'firebase/database';
 import { db } from '../firebase';
@@ -16,7 +15,7 @@ interface AdminDashboardProps {
 const ADMIN_PASSWORD = "nanah148alimi";
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
-    participants, prizes, settings, ticketPacks, drawHistory, onDraw 
+  participants, prizes, settings, ticketPacks, drawHistory, onDraw 
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -160,6 +159,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <thead>
                 <tr className="text-slate-500 border-b border-white/5">
                   <th className="pb-4 font-medium">Nom</th>
+                  {/* --- MODIFICATION 1 : Ajout En-tête Téléphone --- */}
+                  <th className="pb-4 font-medium">Téléphone</th>
                   <th className="pb-4 font-medium">Tickets</th>
                   <th className="pb-4 font-medium">Mode</th>
                   <th className="pb-4 font-medium">Total</th>
@@ -170,6 +171,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {participants.map(p => (
                   <tr key={p.id} className="hover:bg-white/5 transition-colors group">
                     <td className="py-4 font-medium text-white">{p.name}</td>
+                    
+                    {/* --- MODIFICATION 2 : Ajout Cellule Téléphone --- */}
+                    <td className="py-4 text-slate-300 font-mono text-sm">{p.phone}</td>
+                    
                     <td className="py-4">
                       {editingParticipant === p.id ? (
                         <input type="number" value={editQty} onChange={(e) => setEditQty(parseInt(e.target.value) || 0)}
