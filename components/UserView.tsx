@@ -23,9 +23,10 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
   const handleNext = () => {
     if (step === 1 && purchaseMode) {
       if (purchaseMode === 'pack' && !selectedPack) return;
+      if (purchaseMode === 'unit' && (tickets < 1 || finalAmount <= 0)) return;
       setStep(2);
     }
-    else if (step === 2 && name) setStep(3);
+    else if (step === 2 && name.trim()) setStep(3);
   };
 
   const handleBack = () => {
@@ -34,15 +35,30 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !purchaseMode) return;
+    if (!name.trim() || !purchaseMode) return;
     
-    onJoin({
-      name,
-      tickets: finalTickets,
-      totalAmount: finalAmount,
-      mode: purchaseMode,
-      packLabel: purchaseMode === 'pack' ? selectedPack?.label : undefined
-    });
+    // Final verification of values before submission
+    const safeTickets = Number(finalTickets);
+    const safeAmount = Number(finalAmount);
+
+    if (safeTickets < 1 || safeAmount <= 0) {
+      alert("Veuillez sélectionner au moins un ticket.");
+      return;
+    }
+
+    // Cleanly construct object to avoid passing undefined values to onJoin
+    const participantData: any = {
+      name: name.trim(),
+      tickets: safeTickets,
+      totalAmount: safeAmount,
+      mode: purchaseMode
+    };
+
+    if (purchaseMode === 'pack' && selectedPack) {
+      participantData.packLabel = selectedPack.label;
+    }
+
+    onJoin(participantData);
 
     setName('');
     setPurchaseMode(null);
@@ -100,8 +116,12 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
                         {purchaseMode === 'unit' && (
                             <div className="flex items-center justify-center gap-4 mt-4 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
                                 <button onClick={decrement} className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 transition-all">-</button>
-                                <input type="number" value={tickets} onChange={(e) => setTickets(Math.max(1, Math.min(parseInt(e.target.value) || 1, settings.maxTickets)))}
-                                    className="bg-transparent text-3xl font-bold text-center w-16 border-b border-amber-500/50 outline-none" />
+                                <input 
+                                  type="number" 
+                                  value={tickets} 
+                                  onChange={(e) => setTickets(Math.max(1, Math.min(parseInt(e.target.value) || 1, settings.maxTickets)))}
+                                  className="bg-transparent text-3xl font-bold text-center w-16 border-b border-amber-500/50 outline-none text-white" 
+                                />
                                 <button onClick={increment} className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 transition-all">+</button>
                             </div>
                         )}
@@ -120,7 +140,7 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-amber-500 text-white text-lg" />
                 <div className="flex gap-4 pt-4">
                     <button onClick={handleBack} className="flex-1 bg-white/5 text-white py-4 rounded-2xl font-bold">Retour</button>
-                    <button disabled={!name} onClick={handleNext} className="flex-[2] btn-gold py-4 rounded-2xl font-bold uppercase">Récapitulatif <i className="fas fa-arrow-right ml-2"></i></button>
+                    <button disabled={!name.trim()} onClick={handleNext} className="flex-[2] btn-gold py-4 rounded-2xl font-bold uppercase">Récapitulatif <i className="fas fa-arrow-right ml-2"></i></button>
                 </div>
             </div>
         )}
