@@ -1,154 +1,192 @@
+
 import React, { useState, useEffect } from 'react';
-import { db } from './firebase';
-import { collection, onSnapshot, query, orderBy, doc, setDoc, getDocs, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, onValue, push, set, remove, update } from 'firebase/database';
+import { signInAnonymously } from 'firebase/auth';
+import { db, auth } from './firebase';
+import { Participant, Prize, AppSettings, DrawRecord, AppView, TicketPack } from './types';
+import AdminDashboard from './components/AdminDashboard';
+import UserView from './components/UserView';
+import Navbar from './components/Navbar';
+import DrawAnimation from './components/DrawAnimation';
+import confetti from 'canvas-confetti';
 
-// Code de secours : Si ça plante, on affiche pourquoi.
-export default function App() {
-  const [error, setError] = useState<string | null>(null);
-  const [isDbReady, setIsDbReady] = useState(false);
-
-  // Vérification au démarrage
-  useEffect(() => {
-    if (!db) {
-      setError("Les clés API Firebase sont manquantes ou incorrectes dans firebase.ts");
-    } else {
-      setIsDbReady(true);
-    }
-  }, []);
-
-  if (error) {
-    return (
-      <div style={{ padding: 40, backgroundColor: '#ffe6e6', color: '#cc0000', textAlign: 'center' }}>
-        <h1>⚠️ PROBLÈME DÉTECTÉ</h1>
-        <p style={{ fontSize: '20px' }}>{error}</p>
-        <p>Retourne dans le fichier <code>src/firebase.ts</code> et vérifie que tu as bien collé tes clés API à la place des "..."</p>
-      </div>
-    );
-  }
-
-  if (!isDbReady) {
-    return <div style={{ padding: 40, textAlign: 'center' }}>Chargement...</div>;
-  }
-
-  // Si tout va bien, on lance la vraie application
-  return <TombolaApp />;
-}
-
-// --- LA VRAIE APPLICATION (Isolée pour ne pas tout casser) ---
-function TombolaApp() {
-  const [winners, setWinners] = useState<any[]>([]);
-  const [settings, setSettings] = useState<any>({ 
-    title: "Tombola", primaryColor: "#e63946", backgroundColor: "#f1faee" 
+const App: React.FC = () => {
+  const [view, setView] = useState<AppView>('home');
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [prizes, setPrizes] = useState<Prize[]>([]);
+  const [ticketPacks, setTicketPacks] = useState<TicketPack[]>([]);
+  const [settings, setSettings] = useState<AppSettings>({ 
+    unitPrice: 10, 
+    maxTickets: 100,
+    enablePacks: true,
+    enableFreeQty: true
   });
-  const [drawStatus, setDrawStatus] = useState<any>({ state: 'idle' });
-  const [showAdmin, setShowAdmin] = useState(false);
+  const [drawHistory, setDrawHistory] = useState<DrawRecord[]>([]);
+  const [activeDraw, setActiveDraw] = useState<{ prize: Prize } | null>(null);
 
-  // CHARGEMENT DONNÉES
   useEffect(() => {
-    try {
-      if (!db) return;
-      
-      const q = query(collection(db, "winners"), orderBy("wonAt", "desc"));
-      onSnapshot(q, (snap) => setWinners(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    signInAnonymously(auth).catch((error) => {
+      console.warn("Firebase Auth Error:", error.message);
+    });
 
-      onSnapshot(doc(db, "settings", "general"), (d) => {
-        if (d.exists()) setSettings(d.data());
-      });
+    const settingsRef = ref(db, 'settings');
+    onValue(settingsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        setSettings({
+          unitPrice: data.unitPrice ?? 10,
+          maxTickets: data.maxTickets ?? 100,
+          enablePacks: data.enablePacks ?? true,
+          enableFreeQty: data.enableFreeQty ?? true
+        });
+      } else {
+        set(settingsRef, { unitPrice: 10, maxTickets: 100, enablePacks: true, enableFreeQty: true });
+      }
+    });
 
-      onSnapshot(doc(db, "status", "draw"), (d) => {
-        if (d.exists()) setDrawStatus(d.data());
-      });
-    } catch (err: any) {
-      console.error(err);
-      alert("Erreur de connexion : " + err.message);
-    }
+    const participantsRef = ref(db, 'participants');
+    onValue(participantsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const list = Object.entries(data).map(([id, val]: [string, any]) => ({
+          id,
+          name: val.name || 'Anonyme',
+          tickets: Number(val.tickets) || 0,
+          totalAmount: Number(val.totalAmount) || 0,
+          mode: val.mode || 'unit',
+          packLabel: val.packLabel,
+          timestamp: val.timestamp || val.createdAt || Date.now(),
+          createdAt: val.createdAt || val.timestamp
+        }));
+        setParticipants(list);
+      } else {
+        setParticipants([]);
+      }
+    });
+
+    const packsRef = ref(db, 'ticketPacks');
+    onValue(packsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const list = Object.entries(data).map(([id, val]: [string, any]) => ({
+          id,
+          ...val,
+        }));
+        setTicketPacks(list);
+      } else {
+        setTicketPacks([]);
+      }
+    });
+
+    const prizesRef = ref(db, 'prizes');
+    onValue(prizesRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const list = Object.entries(data).map(([id, val]: [string, any]) => ({
+          id,
+          ...val,
+        }));
+        setPrizes(list);
+      } else {
+        setPrizes([]);
+      }
+    });
+
+    const historyRef = ref(db, 'drawHistory');
+    onValue(historyRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const list = Object.entries(data).map(([id, val]: [string, any]) => ({
+          id,
+          ...val,
+        }));
+        setDrawHistory(list);
+      } else {
+        setDrawHistory([]);
+      }
+    });
   }, []);
 
-  // --- FONCTIONS ADMIN ---
-  const launchLiveDraw = async (ticket: string, name: string, prize: string) => {
-    if(!db) return;
-    await setDoc(doc(db, "status", "draw"), { state: 'rolling' });
-    setTimeout(async () => {
-      const winner = { ticketNumber: ticket, name, prize, wonAt: serverTimestamp() };
-      await addDoc(collection(db, "winners"), winner);
-      await setDoc(doc(db, "status", "draw"), { state: 'winner', currentWinner: winner });
-    }, 4000);
+  const handleAddParticipant = async (participantData: Omit<Participant, 'id' | 'timestamp'>) => {
+    const now = Date.now();
+    
+    // Construction manuelle pour éviter les champs 'undefined' que Firebase refuse
+    const newParticipant: any = {
+      name: participantData.name,
+      mode: participantData.mode,
+      tickets: Number(participantData.tickets),
+      totalAmount: Number(participantData.totalAmount),
+      timestamp: now,
+      createdAt: now
+    };
+
+    // N'ajouter packLabel que s'il est défini
+    if (participantData.packLabel) {
+      newParticipant.packLabel = participantData.packLabel;
+    }
+
+    try {
+      await push(ref(db, 'participants'), newParticipant);
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#fbbf24', '#4c1d95', '#f472b6']
+      });
+    } catch (error) {
+      console.error("Erreur lors de l'ajout du participant:", error);
+      alert("Une erreur est survenue lors de l'enregistrement. Veuillez réessayer.");
+    }
   };
 
-  const resetAll = async () => {
-    if(!db) return;
-    if(!confirm("Tout effacer ?")) return;
-    const snap = await getDocs(collection(db, "winners"));
-    snap.forEach(d => deleteDoc(d.ref));
+  const handleDrawFinish = async (winnerName: string, prizeName: string) => {
+    const record: Omit<DrawRecord, 'id'> = {
+      winner: winnerName,
+      prize: prizeName,
+      timestamp: Date.now()
+    };
+    await push(ref(db, 'drawHistory'), record);
+    setActiveDraw(null);
   };
 
-  const saveSettings = async (newSettings: any) => {
-    if(!db) return;
-    await setDoc(doc(db, "settings", "general"), newSettings);
-  };
-
-  // --- RENDU ---
-  
-  // 1. Mode ROULEMENT
-  if (drawStatus.state === 'rolling') {
-    return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: settings.primaryColor, color: 'white' }}>
-        <h1>🥁 TIRAGE EN COURS...</h1>
-      </div>
-    );
-  }
-
-  // 2. Mode GAGNANT
-  if (drawStatus.state === 'winner' && drawStatus.currentWinner) {
-    return (
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#ffd700', textAlign: 'center' }}>
-        <h1>🎉 {drawStatus.currentWinner.name} 🎉</h1>
-        <h2>Ticket #{drawStatus.currentWinner.ticketNumber}</h2>
-        <button onClick={() => setShowAdmin(true)} style={{ marginTop: 20 }}>Admin</button>
-      </div>
-    );
-  }
-
-  // 3. Mode LISTE (Normal)
   return (
-    <div style={{ minHeight: '100vh', padding: 20, background: settings.backgroundColor }}>
-      <h1 style={{ textAlign: 'center', color: settings.primaryColor }}>{settings.title}</h1>
+    <div className="min-h-screen bg-slate-900 overflow-x-hidden pb-10">
+      <Navbar currentView={view} setView={setView} isAdmin={isAdmin} setIsAdmin={setIsAdmin} />
       
-      <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
-        {winners.map(w => (
-          <div key={w.id} style={{ padding: 20, background: 'white', borderLeft: `5px solid ${settings.primaryColor}`, boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
-            <strong>#{w.ticketNumber}</strong> <br/> {w.name} <br/> 🎁 {w.prize}
-          </div>
-        ))}
-      </div>
+      <main className="max-w-5xl mx-auto px-4 pt-24">
+        {activeDraw ? (
+          <DrawAnimation 
+            prize={activeDraw.prize} 
+            participants={participants} 
+            onFinish={handleDrawFinish}
+            onCancel={() => setActiveDraw(null)}
+          />
+        ) : view === 'home' ? (
+          <UserView 
+            prizes={prizes} 
+            settings={settings}
+            ticketPacks={ticketPacks}
+            onJoin={handleAddParticipant} 
+            drawHistory={drawHistory}
+          />
+        ) : (
+          <AdminDashboard 
+            participants={participants} 
+            prizes={prizes} 
+            settings={settings}
+            ticketPacks={ticketPacks}
+            drawHistory={drawHistory}
+            onDraw={(prize) => setActiveDraw({ prize })}
+          />
+        )}
+      </main>
 
-      <button onClick={() => setShowAdmin(!showAdmin)} style={{ position: 'fixed', bottom: 20, right: 20, padding: 10 }}>⚙️</button>
-
-      {/* ADMIN PANEL SIMPLIFIÉ */}
-      {showAdmin && (
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', borderTop: '2px solid black', padding: 20 }}>
-          <h3>Admin</h3>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <input id="adm-tick" placeholder="Ticket" />
-            <input id="adm-name" placeholder="Nom" />
-            <input id="adm-prize" placeholder="Lot" />
-            <button onClick={() => {
-              const t = (document.getElementById('adm-tick') as HTMLInputElement).value;
-              const n = (document.getElementById('adm-name') as HTMLInputElement).value;
-              const p = (document.getElementById('adm-prize') as HTMLInputElement).value;
-              launchLiveDraw(t, n, p);
-            }}>🚀 LANCER LIVE</button>
-            <button onClick={resetAll} style={{ background: 'red', color: 'white' }}>🗑️ RESET</button>
-            <div style={{ borderLeft: '1px solid #ccc', paddingLeft: 10, marginLeft: 10 }}>
-              Design: 
-              <input type="text" value={settings.title} onChange={e => setSettings({...settings, title: e.target.value})} />
-              <input type="color" value={settings.primaryColor} onChange={e => setSettings({...settings, primaryColor: e.target.value})} />
-              <input type="color" value={settings.backgroundColor} onChange={e => setSettings({...settings, backgroundColor: e.target.value})} />
-              <button onClick={() => saveSettings(settings)}>💾 Sauvegarder</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <footer className="mt-20 text-center text-slate-500 text-sm">
+        <p>© 2024 Tombola Festive • La joie d'Adar</p>
+      </footer>
     </div>
   );
-}
+};
+
+export default App;
