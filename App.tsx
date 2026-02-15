@@ -45,13 +45,14 @@ const App: React.FC = () => {
       }
     });
 
-    const participantsRef = ref(db, 'participants');
+   const participantsRef = ref(db, 'participants');
     onValue(participantsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const list = Object.entries(data).map(([id, val]: [string, any]) => ({
           id,
           name: val.name || 'Anonyme',
+          phone: val.phone || 'Non renseigné', // <-- AJOUTEZ CETTE LIGNE
           tickets: Number(val.tickets) || 0,
           totalAmount: Number(val.totalAmount) || 0,
           mode: val.mode || 'unit',
