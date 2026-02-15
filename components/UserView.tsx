@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Prize, AppSettings, DrawRecord, TicketPack, Participant } from '../types';
 
@@ -13,6 +12,7 @@ interface UserViewProps {
 const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, drawHistory, onJoin }) => {
   const [step, setStep] = useState(1);
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState(''); // Déjà présent, c'est bien
   const [purchaseMode, setPurchaseMode] = useState<'pack' | 'unit' | null>(null);
   const [selectedPack, setSelectedPack] = useState<TicketPack | null>(null);
   const [tickets, setTickets] = useState(1);
@@ -26,7 +26,10 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
       if (purchaseMode === 'unit' && (tickets < 1 || finalAmount <= 0)) return;
       setStep(2);
     }
-    else if (step === 2 && name.trim()) setStep(3);
+    // MODIFICATION 1 : Vérifier aussi que le téléphone est rempli
+    else if (step === 2 && name.trim() && phone.trim()) {
+        setStep(3);
+    }
   };
 
   const handleBack = () => {
@@ -35,7 +38,8 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !purchaseMode) return;
+    // MODIFICATION 2 : Vérifier le téléphone ici aussi
+    if (!name.trim() || !phone.trim() || !purchaseMode) return;
     
     // Final verification of values before submission
     const safeTickets = Number(finalTickets);
@@ -49,6 +53,7 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
     // Cleanly construct object to avoid passing undefined values to onJoin
     const participantData: any = {
       name: name.trim(),
+      phone: phone.trim(), // MODIFICATION 3 : Ajouter le téléphone à l'objet
       tickets: safeTickets,
       totalAmount: safeAmount,
       mode: purchaseMode
@@ -61,6 +66,7 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
     onJoin(participantData);
 
     setName('');
+    setPhone(''); // MODIFICATION 4 : Reset du téléphone
     setPurchaseMode(null);
     setSelectedPack(null);
     setTickets(1);
@@ -133,14 +139,28 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
             </div>
         )}
 
+        {/* MODIFICATION 5 : Ajout du champ téléphone dans l'étape 2 */}
         {step === 2 && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
-                <h3 className="text-2xl font-bold text-center">Étape 2 : Votre nom ✍️</h3>
-                <input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: David Cohen"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-amber-500 text-white text-lg" />
+                <h3 className="text-2xl font-bold text-center">Étape 2 : Vos coordonnées ✍️</h3>
+                
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-slate-400 mb-2 text-sm">Nom complet</label>
+                        <input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: David Cohen"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-amber-500 text-white text-lg" />
+                    </div>
+                    
+                    <div>
+                        <label className="block text-slate-400 mb-2 text-sm">Numéro de téléphone</label>
+                        <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ex: 050-123-4567"
+                            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-amber-500 text-white text-lg" />
+                    </div>
+                </div>
+
                 <div className="flex gap-4 pt-4">
                     <button onClick={handleBack} className="flex-1 bg-white/5 text-white py-4 rounded-2xl font-bold">Retour</button>
-                    <button disabled={!name.trim()} onClick={handleNext} className="flex-[2] btn-gold py-4 rounded-2xl font-bold uppercase">Récapitulatif <i className="fas fa-arrow-right ml-2"></i></button>
+                    <button disabled={!name.trim() || !phone.trim()} onClick={handleNext} className="flex-[2] btn-gold py-4 rounded-2xl font-bold uppercase disabled:opacity-50">Récapitulatif <i className="fas fa-arrow-right ml-2"></i></button>
                 </div>
             </div>
         )}
@@ -151,6 +171,10 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
                 <div className="bg-white/5 rounded-3xl p-8 mb-8 border border-white/10 space-y-4">
                     <div className="flex justify-between items-center border-b border-white/5 pb-4">
                         <span className="text-slate-400">Nom :</span> <span className="font-bold text-xl">{name}</span>
+                    </div>
+                    {/* MODIFICATION 6 : Affichage du téléphone dans le récap */}
+                    <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                        <span className="text-slate-400">Tél :</span> <span className="font-bold text-xl">{phone}</span>
                     </div>
                     <div className="flex justify-between items-center border-b border-white/5 pb-4">
                         <span className="text-slate-400">Mode :</span> <span className="font-bold text-amber-300">{purchaseMode === 'pack' ? `Pack ${selectedPack?.label}` : 'Quantité Libre'}</span>
