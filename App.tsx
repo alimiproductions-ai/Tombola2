@@ -1,192 +1,146 @@
+import { useEffect, useState } from 'react';
+import { db } from './firebase';
+import { collection, onSnapshot, doc, query, orderBy } from 'firebase/firestore';
+import { AppSettings, Winner, DrawStatus } from './types';
+import { AdminPanel } from './components/AdminPanel';
 
-import React, { useState, useEffect } from 'react';
-import { ref, onValue, push, set, remove, update } from 'firebase/database';
-import { signInAnonymously } from 'firebase/auth';
-import { db, auth } from './firebase';
-import { Participant, Prize, AppSettings, DrawRecord, AppView, TicketPack } from './types';
-import AdminDashboard from './components/AdminDashboard';
-import UserView from './components/UserView';
-import Navbar from './components/Navbar';
-import DrawAnimation from './components/DrawAnimation';
-import confetti from 'canvas-confetti';
+// Valeurs par défaut
+const defaultSettings: AppSettings = {
+  title: "Grande Tombola",
+  primaryColor: "#e63946", // Rouge par défaut
+  backgroundColor: "#f1faee", // Blanc cassé par défaut
+};
 
-const App: React.FC = () => {
-  const [view, setView] = useState<AppView>('home');
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [prizes, setPrizes] = useState<Prize[]>([]);
-  const [ticketPacks, setTicketPacks] = useState<TicketPack[]>([]);
-  const [settings, setSettings] = useState<AppSettings>({ 
-    unitPrice: 10, 
-    maxTickets: 100,
-    enablePacks: true,
-    enableFreeQty: true
-  });
-  const [drawHistory, setDrawHistory] = useState<DrawRecord[]>([]);
-  const [activeDraw, setActiveDraw] = useState<{ prize: Prize } | null>(null);
+function App() {
+  const [winners, setWinners] = useState<Winner[]>([]);
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [drawStatus, setDrawStatus] = useState<DrawStatus>({ state: 'idle' });
+  const [showAdmin, setShowAdmin] = useState(false);
 
+  // 1. Écouter les gagnants en temps réel
   useEffect(() => {
-    signInAnonymously(auth).catch((error) => {
-      console.warn("Firebase Auth Error:", error.message);
+    const q = query(collection(db, "winners"), orderBy("wonAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const winnersList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Winner[];
+      setWinners(winnersList);
     });
-
-    const settingsRef = ref(db, 'settings');
-    onValue(settingsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setSettings({
-          unitPrice: data.unitPrice ?? 10,
-          maxTickets: data.maxTickets ?? 100,
-          enablePacks: data.enablePacks ?? true,
-          enableFreeQty: data.enableFreeQty ?? true
-        });
-      } else {
-        set(settingsRef, { unitPrice: 10, maxTickets: 100, enablePacks: true, enableFreeQty: true });
-      }
-    });
-
-    const participantsRef = ref(db, 'participants');
-    onValue(participantsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const list = Object.entries(data).map(([id, val]: [string, any]) => ({
-          id,
-          name: val.name || 'Anonyme',
-          tickets: Number(val.tickets) || 0,
-          totalAmount: Number(val.totalAmount) || 0,
-          mode: val.mode || 'unit',
-          packLabel: val.packLabel,
-          timestamp: val.timestamp || val.createdAt || Date.now(),
-          createdAt: val.createdAt || val.timestamp
-        }));
-        setParticipants(list);
-      } else {
-        setParticipants([]);
-      }
-    });
-
-    const packsRef = ref(db, 'ticketPacks');
-    onValue(packsRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const list = Object.entries(data).map(([id, val]: [string, any]) => ({
-          id,
-          ...val,
-        }));
-        setTicketPacks(list);
-      } else {
-        setTicketPacks([]);
-      }
-    });
-
-    const prizesRef = ref(db, 'prizes');
-    onValue(prizesRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const list = Object.entries(data).map(([id, val]: [string, any]) => ({
-          id,
-          ...val,
-        }));
-        setPrizes(list);
-      } else {
-        setPrizes([]);
-      }
-    });
-
-    const historyRef = ref(db, 'drawHistory');
-    onValue(historyRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const list = Object.entries(data).map(([id, val]: [string, any]) => ({
-          id,
-          ...val,
-        }));
-        setDrawHistory(list);
-      } else {
-        setDrawHistory([]);
-      }
-    });
+    return () => unsubscribe();
   }, []);
 
-  const handleAddParticipant = async (participantData: Omit<Participant, 'id' | 'timestamp'>) => {
-    const now = Date.now();
-    
-    // Construction manuelle pour éviter les champs 'undefined' que Firebase refuse
-    const newParticipant: any = {
-      name: participantData.name,
-      mode: participantData.mode,
-      tickets: Number(participantData.tickets),
-      totalAmount: Number(participantData.totalAmount),
-      timestamp: now,
-      createdAt: now
-    };
+  // 2. Écouter la configuration (Titre, couleurs)
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, "settings", "general"), (doc) => {
+      if (doc.exists()) {
+        setSettings(doc.data() as AppSettings);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
-    // N'ajouter packLabel que s'il est défini
-    if (participantData.packLabel) {
-      newParticipant.packLabel = participantData.packLabel;
-    }
+  // 3. Écouter le statut du LIVE (Animation tirage)
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, "status", "draw"), (doc) => {
+      if (doc.exists()) {
+        setDrawStatus(doc.data() as DrawStatus);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
-    try {
-      await push(ref(db, 'participants'), newParticipant);
-      confetti({
-        particleCount: 100,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#fbbf24', '#4c1d95', '#f472b6']
-      });
-    } catch (error) {
-      console.error("Erreur lors de l'ajout du participant:", error);
-      alert("Une erreur est survenue lors de l'enregistrement. Veuillez réessayer.");
-    }
-  };
+  // --- RENDU DE L'APPLICATION ---
 
-  const handleDrawFinish = async (winnerName: string, prizeName: string) => {
-    const record: Omit<DrawRecord, 'id'> = {
-      winner: winnerName,
-      prize: prizeName,
-      timestamp: Date.now()
-    };
-    await push(ref(db, 'drawHistory'), record);
-    setActiveDraw(null);
-  };
+  // MODE : ANIMATION DE TIRAGE (Plein écran)
+  if (drawStatus.state === 'rolling') {
+    return (
+      <div style={{ 
+        height: '100vh', display: 'flex', flexDirection: 'column', 
+        justifyContent: 'center', alignItems: 'center', 
+        backgroundColor: settings.primaryColor, color: 'white' 
+      }}>
+        <h1>🎲 TIRAGE EN COURS...</h1>
+        <div className="spinner" style={{ fontSize: '50px', marginTop: '20px' }}>🥁 🥁 🥁</div>
+      </div>
+    );
+  }
 
+  // MODE : GAGNANT VIENT DE SORTIR (Plein écran)
+  if (drawStatus.state === 'winner' && drawStatus.currentWinner) {
+    return (
+      <div style={{ 
+        height: '100vh', display: 'flex', flexDirection: 'column', 
+        justifyContent: 'center', alignItems: 'center', 
+        backgroundColor: '#ffd700', color: 'black', textAlign: 'center'
+      }}>
+        <h1>🎉 FÉLICITATIONS ! 🎉</h1>
+        <h2 style={{ fontSize: '3rem' }}>{drawStatus.currentWinner.name}</h2>
+        <h3>Ticket N° {drawStatus.currentWinner.ticketNumber}</h3>
+        <p>Remporte : {drawStatus.currentWinner.prize}</p>
+        
+        {/* Petit bouton caché pour que l'admin puisse sortir de l'écran gagnant s'il est bloqué */}
+        <button onClick={() => setShowAdmin(true)} style={{ opacity: 0.1, marginTop: '50px' }}>Admin</button>
+      </div>
+    );
+  }
+
+  // MODE : LISTE NORMALE (Mur des gagnants)
   return (
-    <div className="min-h-screen bg-slate-900 overflow-x-hidden pb-10">
-      <Navbar currentView={view} setView={setView} isAdmin={isAdmin} setIsAdmin={setIsAdmin} />
+    <div style={{ minHeight: '100vh', padding: '20px', backgroundColor: settings.backgroundColor }}>
       
-      <main className="max-w-5xl mx-auto px-4 pt-24">
-        {activeDraw ? (
-          <DrawAnimation 
-            prize={activeDraw.prize} 
-            participants={participants} 
-            onFinish={handleDrawFinish}
-            onCancel={() => setActiveDraw(null)}
-          />
-        ) : view === 'home' ? (
-          <UserView 
-            prizes={prizes} 
-            settings={settings}
-            ticketPacks={ticketPacks}
-            onJoin={handleAddParticipant} 
-            drawHistory={drawHistory}
-          />
-        ) : (
-          <AdminDashboard 
-            participants={participants} 
-            prizes={prizes} 
-            settings={settings}
-            ticketPacks={ticketPacks}
-            drawHistory={drawHistory}
-            onDraw={(prize) => setActiveDraw({ prize })}
-          />
-        )}
-      </main>
+      {/* En-tête configurables */}
+      <header style={{ textAlign: 'center', marginBottom: '40px' }}>
+        <h1 style={{ color: settings.primaryColor, fontSize: '3rem' }}>{settings.title}</h1>
+        <p>Les tickets gagnants s'affichent ici en direct</p>
+      </header>
 
-      <footer className="mt-20 text-center text-slate-500 text-sm">
-        <p>© 2024 Tombola Festive • La joie d'Adar</p>
-      </footer>
+      {/* Grille des gagnants */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', 
+        gap: '20px', 
+        maxWidth: '1200px', 
+        margin: '0 auto' 
+      }}>
+        {winners.map((winner) => (
+          <div key={winner.id} style={{ 
+            backgroundColor: 'white', 
+            border: `2px solid ${settings.primaryColor}`, 
+            borderRadius: '10px', 
+            padding: '20px',
+            textAlign: 'center',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: settings.primaryColor }}>
+              #{winner.ticketNumber}
+            </div>
+            <div style={{ fontSize: '1.2rem', margin: '10px 0' }}>{winner.name}</div>
+            <div style={{ fontSize: '0.9rem', color: '#666' }}>🎁 {winner.prize}</div>
+          </div>
+        ))}
+      </div>
+
+      {winners.length === 0 && (
+        <p style={{ textAlign: 'center', marginTop: '50px', opacity: 0.5 }}>
+          Aucun gagnant pour le moment... Le tirage va commencer !
+        </p>
+      )}
+
+      {/* Bouton pour ouvrir l'Admin */}
+      <div style={{ marginTop: '50px', textAlign: 'center' }}>
+        <button 
+          onClick={() => setShowAdmin(!showAdmin)}
+          style={{ padding: '10px', cursor: 'pointer', opacity: 0.5 }}
+        >
+          {showAdmin ? 'Fermer Admin' : 'Ouvrir Admin'}
+        </button>
+      </div>
+
+      {/* Panneau Admin (Visible seulement si activé) */}
+      {showAdmin && <AdminPanel currentSettings={settings} />}
     </div>
   );
-};
+}
 
 export default App;
