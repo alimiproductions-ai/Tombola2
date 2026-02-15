@@ -74,12 +74,13 @@ const App: React.FC = () => {
           id,
           ...val,
         }));
+     list.sort((a, b) => a.price - b.price); 
+        
         setTicketPacks(list);
       } else {
         setTicketPacks([]);
       }
     });
-
     const prizesRef = ref(db, 'prizes');
     onValue(prizesRef, (snapshot) => {
       const data = snapshot.val();
