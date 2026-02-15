@@ -1,42 +1,19 @@
-
-export interface Participant {
+export interface Winner {
   id: string;
+  ticketNumber: string;
   name: string;
-  tickets: number;
-  totalAmount: number;
-  mode: 'pack' | 'unit';
-  packLabel?: string;
-  timestamp: number;
-}
-
-export interface Prize {
-  id: string;
-  name: string;
-  image: string;
-  active: boolean;
-}
-
-export interface TicketPack {
-  id: string;
-  label: string;
-  description: string;
-  price: number;
-  bonus: string;
-  tickets: number;
+  prize: string;
+  wonAt: any; // Timestamp Firestore
 }
 
 export interface AppSettings {
-  unitPrice: number;
-  maxTickets: number;
-  enablePacks: boolean;
-  enableFreeQty: boolean;
+  title: string;
+  primaryColor: string;
+  backgroundColor: string;
+  logoUrl?: string;
 }
 
-export interface DrawRecord {
-  id: string;
-  winner: string;
-  prize: string;
-  timestamp: number;
+export interface DrawStatus {
+  state: 'idle' | 'rolling' | 'winner'; // 'idle' (rien), 'rolling' (roulement tambour), 'winner' (gagnant affiché)
+  currentWinner?: Winner | null;
 }
-
-export type AppView = 'home' | 'admin';
