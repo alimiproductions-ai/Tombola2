@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { Prize, AppSettings, DrawRecord, TicketPack, Participant } from '../types';
 
+// --- CONFIGURATION BIT ---
+const BIT_PHONE = "050-123-4567"; // Ton numéro
+const BIT_LINK = "https://bitpay.co.il/app/me/XXXXXXXX"; // Ton lien
+
 interface UserViewProps {
   prizes: Prize[];
   settings: AppSettings;
@@ -12,10 +16,13 @@ interface UserViewProps {
 const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, drawHistory, onJoin }) => {
   const [step, setStep] = useState(1);
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState(''); // Déjà présent, c'est bien
+  const [phone, setPhone] = useState('');
   const [purchaseMode, setPurchaseMode] = useState<'pack' | 'unit' | null>(null);
   const [selectedPack, setSelectedPack] = useState<TicketPack | null>(null);
   const [tickets, setTickets] = useState(1);
+  
+  // --- NOUVEL ÉTAT POUR L'ÉCRAN DE SUCCÈS ---
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const finalTickets = purchaseMode === 'pack' ? (selectedPack?.tickets || 0) : tickets;
   const finalAmount = purchaseMode === 'pack' ? (selectedPack?.price || 0) : (tickets * settings.unitPrice);
@@ -26,7 +33,6 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
       if (purchaseMode === 'unit' && (tickets < 1 || finalAmount <= 0)) return;
       setStep(2);
     }
-    // MODIFICATION 1 : Vérifier aussi que le téléphone est rempli
     else if (step === 2 && name.trim() && phone.trim()) {
         setStep(3);
     }
@@ -38,10 +44,8 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // MODIFICATION 2 : Vérifier le téléphone ici aussi
     if (!name.trim() || !phone.trim() || !purchaseMode) return;
     
-    // Final verification of values before submission
     const safeTickets = Number(finalTickets);
     const safeAmount = Number(finalAmount);
 
@@ -50,10 +54,9 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
       return;
     }
 
-    // Cleanly construct object to avoid passing undefined values to onJoin
     const participantData: any = {
       name: name.trim(),
-      phone: phone.trim(), // MODIFICATION 3 : Ajouter le téléphone à l'objet
+      phone: phone.trim(),
       tickets: safeTickets,
       totalAmount: safeAmount,
       mode: purchaseMode
@@ -65,22 +68,70 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
 
     onJoin(participantData);
 
-    setName('');
-    setPhone(''); // MODIFICATION 4 : Reset du téléphone
-    setPurchaseMode(null);
-    setSelectedPack(null);
-    setTickets(1);
-    setStep(1);
+    // AU LIEU DE RESET TOUT DE SUITE, ON AFFICHE LE SUCCÈS
+    setIsSuccess(true);
+  };
+
+  // Fonction pour recommencer (reset complet)
+  const handleReset = () => {
+      setName('');
+      setPhone('');
+      setPurchaseMode(null);
+      setSelectedPack(null);
+      setTickets(1);
+      setStep(1);
+      setIsSuccess(false);
   };
 
   const increment = () => setTickets(prev => Math.min(prev + 1, settings.maxTickets));
   const decrement = () => setTickets(prev => Math.max(prev - 1, 1));
 
+  // --- ÉCRAN DE SUCCÈS (LE NOUVEAU MEILLEUR AMI DU USER) ---
+  if (isSuccess) {
+      return (
+        <div className="flex flex-col items-center justify-center pt-10 pb-20 space-y-8 animate-in fade-in zoom-in duration-500">
+            <div className="w-24 h-24 bg-emerald-500 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.5)]">
+                <i className="fas fa-check text-4xl text-slate-900"></i>
+            </div>
+            
+            <div className="text-center space-y-2">
+                <h2 className="text-4xl font-festive text-white">Mazal Tov !</h2>
+                <p className="text-slate-300">Votre participation est bien enregistrée.</p>
+                <div className="bg-white/10 px-6 py-2 rounded-full inline-block mt-4">
+                    <span className="text-amber-400 font-bold text-xl">Ticket #{Math.floor(Math.random()*1000)+1000}</span>
+                </div>
+            </div>
+
+            {/* LE BLOC PAIEMENT APPARAIT ICI, SANS BLOQUER */}
+            <div className="bg-[#0073e6]/10 border border-[#0073e6]/30 p-8 rounded-3xl max-w-md w-full text-center space-y-6">
+                <h3 className="text-xl font-bold text-[#0073e6]">Finaliser le don</h3>
+                <p className="text-slate-300 text-sm">
+                    Pour valider définitivement vos <strong className="text-white">{finalTickets} tickets</strong>, merci d'envoyer <strong className="text-white">{finalAmount} ₪</strong> via Bit.
+                </p>
+                
+                <a href={BIT_LINK} target="_blank" rel="noopener noreferrer" 
+                   className="block w-full bg-[#0073e6] hover:bg-[#0060c0] text-white py-4 rounded-xl font-bold transition-all shadow-lg transform hover:scale-105 flex items-center justify-center gap-3">
+                   <span className="text-2xl font-extrabold italic">bit</span>
+                   <span>Payer maintenant</span>
+                </a>
+                
+                <div className="text-xs text-slate-500">
+                    Ou manuellement au : <span className="text-slate-300 font-mono text-base ml-1">{BIT_PHONE}</span>
+                </div>
+            </div>
+
+            <button onClick={handleReset} className="text-slate-500 hover:text-white underline transition-colors">
+                Retour à l'accueil
+            </button>
+        </div>
+      );
+  }
+
   return (
     <div className="space-y-12">
       <section className="text-center space-y-4 pt-8">
-        <h1 className="text-5xl md:text-7xl font-festive glow-gold text-amber-200 animate-float">Soutenez la Hafatza !</h1>
-        <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">Soutenez la diffusion et l'impression des livres de Rabbi Nahman et gagnez des lots incroyables.</p>
+        <h1 className="text-5xl md:text-7xl font-festive glow-gold text-amber-200 animate-float">Tentez votre chance !</h1>
+        <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">Soutenez-nous et gagnez des lots incroyables.</p>
       </section>
 
       <section className="card-glass p-6 md:p-10 rounded-[40px] max-w-2xl mx-auto shadow-2xl relative overflow-hidden border border-white/10">
@@ -139,7 +190,6 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
             </div>
         )}
 
-        {/* MODIFICATION 5 : Ajout du champ téléphone dans l'étape 2 */}
         {step === 2 && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
                 <h3 className="text-2xl font-bold text-center">Étape 2 : Vos coordonnées ✍️</h3>
@@ -172,7 +222,6 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
                     <div className="flex justify-between items-center border-b border-white/5 pb-4">
                         <span className="text-slate-400">Nom :</span> <span className="font-bold text-xl">{name}</span>
                     </div>
-                    {/* MODIFICATION 6 : Affichage du téléphone dans le récap */}
                     <div className="flex justify-between items-center border-b border-white/5 pb-4">
                         <span className="text-slate-400">Tél :</span> <span className="font-bold text-xl">{phone}</span>
                     </div>
@@ -183,14 +232,25 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
                         <span className="text-slate-400">Total :</span> <span className="font-bold text-amber-400">{finalAmount} ₪ ({finalTickets} tickets)</span>
                     </div>
                 </div>
+                
+                {/* Info paiement discret avant validation */}
+                <div className="text-sm text-slate-400 mb-6 bg-blue-500/10 p-3 rounded-lg border border-blue-500/20">
+                    <i className="fas fa-info-circle mr-2"></i>
+                    Le paiement par Bit vous sera proposé après validation.
+                </div>
+
                 <div className="flex gap-4">
                     <button onClick={handleBack} className="flex-1 bg-white/5 text-white py-4 rounded-2xl font-bold">Retour</button>
-                    <button onClick={handleSubmit} className="flex-[2] btn-gold py-4 rounded-2xl font-bold uppercase text-lg shadow-lg">Valider mon achat 🎉</button>
+                    {/* Le bouton valide l'inscription D'ABORD */}
+                    <button onClick={handleSubmit} className="flex-[2] btn-gold py-4 rounded-2xl font-bold uppercase text-lg shadow-lg">
+                        Valider ma participation 🎉
+                    </button>
                 </div>
             </div>
         )}
       </section>
 
+      {/* ... Section des Lots et Gagnants (inchangé) ... */}
       <section>
         <h2 className="text-3xl font-festive mb-8 text-center text-amber-100 flex items-center justify-center gap-4">
           <div className="h-[2px] w-12 bg-amber-500/50"></div>Lots à gagner<div className="h-[2px] w-12 bg-amber-500/50"></div>
