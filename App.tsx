@@ -201,15 +201,16 @@ const App: React.FC = () => {
   };
 
   // User close (local only if not admin, but ideally waits for admin)
+// --- Modifie cette fonction dans App.tsx ---
   const handleUserClose = () => {
-      if(isAdmin) {
-          handleDrawFinish();
+      if (isAdmin) {
+          // Si je suis admin, je supprime de la DB (ferme pour tout le monde)
+          handleDrawFinish(); 
       } else {
-          // Pour un user normal, on ne peut pas forcer la fermeture de la DB
-          // On attend juste que l'admin ferme.
-          console.log("Waiting for admin to close");
+          // Si je suis user (ou bloqué), je ferme juste MON écran
+          setActiveDraw(null); 
       }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-slate-900 overflow-x-hidden pb-10">
