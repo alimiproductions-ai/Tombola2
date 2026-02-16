@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { Prize, AppSettings, DrawRecord, TicketPack, Participant } from '../types';
 
-// --- CONFIGURATION BIT ---
-const BIT_PHONE = "050-123-4567"; // Ton numéro
-const BIT_LINK = "https://bitpay.co.il/app/me/XXXXXXXX"; // Ton lien
+// --- CONFIGURATION DU PAIEMENT ---
+
+// 1. Configuration BIT
+const BIT_PHONE = "058-522-0894"; // <--- Numéro pour BIT
+const BIT_APP_LINK = "https://www.bitpay.co.il"; // Lien générique vers l'app
+
+// 2. Configuration PAYBOX
+const PAYBOX_PHONE = "058-644-6279"; // <--- Numéro pour PAYBOX (Différent)
+const PAYBOX_PERSONAL_LINK = "https://links.payboxapp.com/xd6m6TIvMUb"; // <--- Ton lien DIRECT PayBox ici
+
 
 interface UserViewProps {
   prizes: Prize[];
@@ -20,8 +27,6 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
   const [purchaseMode, setPurchaseMode] = useState<'pack' | 'unit' | null>(null);
   const [selectedPack, setSelectedPack] = useState<TicketPack | null>(null);
   const [tickets, setTickets] = useState(1);
-  
-  // --- NOUVEL ÉTAT POUR L'ÉCRAN DE SUCCÈS ---
   const [isSuccess, setIsSuccess] = useState(false);
 
   const finalTickets = purchaseMode === 'pack' ? (selectedPack?.tickets || 0) : tickets;
@@ -67,12 +72,9 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
     }
 
     onJoin(participantData);
-
-    // AU LIEU DE RESET TOUT DE SUITE, ON AFFICHE LE SUCCÈS
     setIsSuccess(true);
   };
 
-  // Fonction pour recommencer (reset complet)
   const handleReset = () => {
       setName('');
       setPhone('');
@@ -86,7 +88,7 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
   const increment = () => setTickets(prev => Math.min(prev + 1, settings.maxTickets));
   const decrement = () => setTickets(prev => Math.max(prev - 1, 1));
 
-  // --- ÉCRAN DE SUCCÈS (LE NOUVEAU MEILLEUR AMI DU USER) ---
+  // --- ÉCRAN DE SUCCÈS ---
   if (isSuccess) {
       return (
         <div className="flex flex-col items-center justify-center pt-10 pb-20 space-y-8 animate-in fade-in zoom-in duration-500">
@@ -102,23 +104,59 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
                 </div>
             </div>
 
-            {/* LE BLOC PAIEMENT APPARAIT ICI, SANS BLOQUER */}
-            <div className="bg-[#0073e6]/10 border border-[#0073e6]/30 p-8 rounded-3xl max-w-md w-full text-center space-y-6">
-                <h3 className="text-xl font-bold text-[#0073e6]">Finaliser le don</h3>
-                <p className="text-slate-300 text-sm">
-                    Pour valider définitivement vos <strong className="text-white">{finalTickets} tickets</strong>, merci d'envoyer <strong className="text-white">{finalAmount} ₪</strong> via Bit.
-                </p>
-                
-                <a href={BIT_LINK} target="_blank" rel="noopener noreferrer" 
-                   className="block w-full bg-[#0073e6] hover:bg-[#0060c0] text-white py-4 rounded-xl font-bold transition-all shadow-lg transform hover:scale-105 flex items-center justify-center gap-3">
-                   <span className="text-2xl font-extrabold italic">bit</span>
-                   <span>Payer maintenant</span>
-                </a>
-                
-                <div className="text-xs text-slate-500">
-                    Ou manuellement au : <span className="text-slate-300 font-mono text-base ml-1">{BIT_PHONE}</span>
+            {/* --- BLOC PAIEMENT SÉPARÉ --- */}
+            <div className="bg-white/5 border border-white/10 p-8 rounded-3xl max-w-md w-full text-center space-y-8">
+                <div>
+                    <h3 className="text-xl font-bold text-amber-200 mb-2">Finaliser le don</h3>
+                    <p className="text-slate-300 text-sm">
+                        Montant à régler : <strong className="text-white text-lg">{finalAmount} ₪</strong>
+                    </p>
                 </div>
+                
+                {/* OPTION 1 : BIT */}
+                <div className="space-y-3 p-4 bg-blue-500/10 rounded-2xl border border-blue-500/20">
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="text-blue-400 font-bold italic text-xl">bit</span>
+                        <span className="text-xs text-slate-400 uppercase tracking-wider ml-auto">Option 1</span>
+                    </div>
+                    {/* Bouton Copier pour Bit */}
+                    <button 
+                        onClick={() => { navigator.clipboard.writeText(BIT_PHONE); alert(`Numéro BIT (${BIT_PHONE}) copié !`); }}
+                        className="w-full bg-slate-800 hover:bg-slate-700 border border-white/10 text-white py-2 rounded-xl flex items-center justify-between px-4 transition-all text-sm"
+                    >
+                        <span className="font-mono text-slate-300">{BIT_PHONE}</span>
+                        <span className="text-xs text-blue-300 flex items-center gap-1"><i className="fas fa-copy"></i> Copier</span>
+                    </button>
+                    {/* Bouton Ouvrir Bit */}
+                    <a href={BIT_APP_LINK} target="_blank" rel="noopener noreferrer" 
+                       className="block w-full bg-[#0073e6] hover:bg-[#0060c0] text-white py-3 rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2">
+                       <span>Ouvrir l'appli Bit</span>
+                    </a>
+                </div>
+
+                {/* OPTION 2 : PAYBOX */}
+                <div className="space-y-3 p-4 bg-cyan-500/10 rounded-2xl border border-cyan-500/20">
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="text-cyan-400 font-bold text-xl">PayBox</span>
+                        <span className="text-xs text-slate-400 uppercase tracking-wider ml-auto">Option 2</span>
+                    </div>
+                     {/* Bouton Copier pour PayBox */}
+                     <button 
+                        onClick={() => { navigator.clipboard.writeText(PAYBOX_PHONE); alert(`Numéro PAYBOX (${PAYBOX_PHONE}) copié !`); }}
+                        className="w-full bg-slate-800 hover:bg-slate-700 border border-white/10 text-white py-2 rounded-xl flex items-center justify-between px-4 transition-all text-sm"
+                    >
+                        <span className="font-mono text-slate-300">{PAYBOX_PHONE}</span>
+                        <span className="text-xs text-cyan-300 flex items-center gap-1"><i className="fas fa-copy"></i> Copier</span>
+                    </button>
+                    {/* Bouton Lien Direct PayBox */}
+                    <a href={PAYBOX_PERSONAL_LINK} target="_blank" rel="noopener noreferrer" 
+                       className="block w-full bg-[#00c2ff] hover:bg-[#00a0d6] text-slate-900 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2">
+                       <span>Payer via mon Lien</span> <i className="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+
             </div>
+            {/* ----------------------------- */}
 
             <button onClick={handleReset} className="text-slate-500 hover:text-white underline transition-colors">
                 Retour à l'accueil
@@ -193,21 +231,18 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
         {step === 2 && (
             <div className="animate-in fade-in slide-in-from-right-4 duration-300 space-y-6">
                 <h3 className="text-2xl font-bold text-center">Étape 2 : Vos coordonnées ✍️</h3>
-                
                 <div className="space-y-4">
                     <div>
                         <label className="block text-slate-400 mb-2 text-sm">Nom complet</label>
                         <input type="text" required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: David Cohen"
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-amber-500 text-white text-lg" />
                     </div>
-                    
                     <div>
                         <label className="block text-slate-400 mb-2 text-sm">Numéro de téléphone</label>
                         <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Ex: 050-123-4567"
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-amber-500 text-white text-lg" />
                     </div>
                 </div>
-
                 <div className="flex gap-4 pt-4">
                     <button onClick={handleBack} className="flex-1 bg-white/5 text-white py-4 rounded-2xl font-bold">Retour</button>
                     <button disabled={!name.trim() || !phone.trim()} onClick={handleNext} className="flex-[2] btn-gold py-4 rounded-2xl font-bold uppercase disabled:opacity-50">Récapitulatif <i className="fas fa-arrow-right ml-2"></i></button>
@@ -233,15 +268,13 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
                     </div>
                 </div>
                 
-                {/* Info paiement discret avant validation */}
-                <div className="text-sm text-slate-400 mb-6 bg-blue-500/10 p-3 rounded-lg border border-blue-500/20">
+                <div className="text-sm text-slate-400 mb-6 bg-amber-500/10 p-3 rounded-lg border border-amber-500/20">
                     <i className="fas fa-info-circle mr-2"></i>
-                    Le paiement par Bit vous sera proposé après validation.
+                    Les liens de paiement (Bit / PayBox) s'afficheront après validation.
                 </div>
 
                 <div className="flex gap-4">
                     <button onClick={handleBack} className="flex-1 bg-white/5 text-white py-4 rounded-2xl font-bold">Retour</button>
-                    {/* Le bouton valide l'inscription D'ABORD */}
                     <button onClick={handleSubmit} className="flex-[2] btn-gold py-4 rounded-2xl font-bold uppercase text-lg shadow-lg">
                         Valider ma participation 🎉
                     </button>
@@ -250,7 +283,6 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
         )}
       </section>
 
-      {/* ... Section des Lots et Gagnants (inchangé) ... */}
       <section>
         <h2 className="text-3xl font-festive mb-8 text-center text-amber-100 flex items-center justify-center gap-4">
           <div className="h-[2px] w-12 bg-amber-500/50"></div>Lots à gagner<div className="h-[2px] w-12 bg-amber-500/50"></div>
