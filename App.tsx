@@ -212,19 +212,34 @@ const App: React.FC = () => {
       }
   };
 
+ // ... (tout le code avant reste pareil)
+
+  // AJOUTE CETTE LOGIQUE JUSTE AVANT LE RETURN
+  // On calcule si le tirage est "vieux" (plus de 60 secondes)
+  const isDrawExpired = activeDraw && (Date.now() - activeDraw.timestamp > 60000); // 60000 ms = 1 minute
+
+  // On affiche l'animation SEULEMENT SI :
+  // 1. Il y a un tirage actif
+  // 2. ET (Ce tirage est récent OU je suis l'Admin)
+  // (L'admin doit toujours le voir pour pouvoir le fermer)
+  const showAnimation = activeDraw && (!isDrawExpired || isAdmin);
+
   return (
     <div className="min-h-screen bg-slate-900 overflow-x-hidden pb-10">
       <Navbar currentView={view} setView={setView} isAdmin={isAdmin} setIsAdmin={setIsAdmin} />
       
       <main className="max-w-5xl mx-auto px-4 pt-24">
-        {activeDraw ? (
+        
+        {/* MODIFICATION ICI : On utilise notre nouvelle variable 'showAnimation' */}
+        {showAnimation && activeDraw ? (
           <DrawAnimation 
             prize={activeDraw.prize} 
             participants={participants} 
-            forcedWinner={activeDraw.winner} // On passe le gagnant décidé par l'admin
+            forcedWinner={activeDraw.winner} 
+            timestamp={activeDraw.timestamp} // Important pour la logique interne aussi
             onFinish={handleDrawFinish}
             onCancel={handleUserClose}
-            isAdmin={isAdmin} // Pour afficher le bouton "Terminer" uniquement à l'admin
+            isAdmin={isAdmin} 
           />
         ) : view === 'home' ? (
           <UserView 
@@ -241,7 +256,7 @@ const App: React.FC = () => {
             settings={settings}
             ticketPacks={ticketPacks}
             drawHistory={drawHistory}
-            onDraw={handleStartDraw} // Utilise la nouvelle fonction start
+            onDraw={handleStartDraw} 
           />
         )}
       </main>
