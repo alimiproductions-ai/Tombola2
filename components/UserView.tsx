@@ -168,8 +168,8 @@ const UserView: React.FC<UserViewProps> = ({ prizes, settings, ticketPacks, draw
   return (
     <div className="space-y-12">
       <section className="text-center space-y-4 pt-8">
-        <h1 className="text-5xl md:text-7xl font-festive glow-gold text-amber-200 animate-float">Tentez votre chance !</h1>
-        <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">Soutenez-nous et gagnez des lots incroyables.</p>
+        <h1 className="text-5xl md:text-7xl font-festive glow-gold text-amber-200 animate-float">Soutenez la Hafatza !</h1>
+        <p className="text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">Soutenez l'impression et la diffusion des livres de Rabbi Nahman et gagnez des lots incroyables !</p>
       </section>
 
       <section className="card-glass p-6 md:p-10 rounded-[40px] max-w-2xl mx-auto shadow-2xl relative overflow-hidden border border-white/10">
